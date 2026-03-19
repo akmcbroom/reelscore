@@ -27,6 +27,7 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 | Framework     | Astro (SSR via `@astrojs/cloudflare` adapter)      |
 | Styling       | Tailwind CSS v4                                    |
 | UI Components | Basecoat (basecoat-css) + HTMX + Alpine.js         |
+| Icons         | Lucide (`lucide-astro`)                             |
 | Auth          | Better Auth (native D1 support, `better-auth-cloudflare`) |
 | Database      | Cloudflare D1 (SQLite) via Drizzle ORM             |
 | Caching       | Cloudflare KV (TMDB/MDbList response caching)      |
@@ -41,6 +42,7 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 - **Minimal Alpine.js.** Alpine handles client-side state only where HTMX can't (modals, dropdown toggles, local UI state). Don't reach for Alpine when HTMX `hx-swap` can do the job.
 - **Basecoat first.** Use Basecoat's class-based components (btn, card, badge, input, select, dialog, tabs, toast, skeleton, avatar, dropdown-menu, popover, etc.) before writing custom CSS. Reference: https://basecoatui.com
 - **Drizzle ORM everywhere.** All D1 queries go through Drizzle. No raw SQL. This gives us typed schemas, migration tooling (`drizzle-kit`), and shared schema definitions with Better Auth.
+- **Lucide icons everywhere.** Use inline Lucide SVGs copied from lucide.dev. The `lucide-astro` package has SSR compatibility issues with Cloudflare Workers, so use raw `<svg>` elements instead. No other icon libraries.
 - **REST-like API structure from day one.** Clean, predictable endpoint naming.
 
 ### Basecoat Components Available
@@ -244,10 +246,11 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ## Features
 
-### Discovery Feeds (Home Page)
+### Discovery Feed (Home Page)
 
-- Sections: Trending, New Releases, In Theaters, Scored for You (logged-in only).
-- Infinite scroll to load more within each section.
+- **Single unified feed** — blends Trending + Now Playing + On The Air + Upcoming from TMDB, deduplicates by TMDB ID, sorts by popularity descending.
+- No separate sections or tabs — one continuous, infinitely-scrolling feed.
+- Scored for You feed (logged-in only) is a future addition (Build Order Step 11).
 - All feeds are **URL-param driven**: active filters update URL, fully shareable/bookmarkable.
 - Clicking a title card opens its detail modal inline (no page navigation, preserves scroll position).
 
@@ -265,6 +268,7 @@ All filter state syncs to URL params and applies site-wide.
 ### Title Card
 
 - **Score pill:** Rounded pill shape, centered, half-overlapping the top of the poster. Left side: ReelScore (color-coded). Right side: thumbs up/down buttons.
+- **Unreleased titles:** If a title's release date is in the future, show a **clock icon** (Lucide `Clock`) in the score pill instead of a score. Pill uses the neutral `bg-surface-600` color.
 - **Below poster:** Title (truncated if long).
 - **Below title:** Type badge (TV or Movie) + Release Date. Watchlist/bookmark button to the right.
 - **Poster overlay, bottom-right:** "..." menu button. Opens options overlaid along the right side of the poster, expanding upward: Refresh Score (auth only), Share, Hide.
@@ -317,9 +321,9 @@ Notifications are detected **lazily**, not via background cron jobs:
 
 ### Score Transparency (Dev Mode)
 
-- Hover any ReelScore badge to see breakdown of all 6 source scores.
-- If logged in, also shows personalization adjustment metrics.
-- Dev/debug only — not exposed to regular users.
+- **Dev only** (`import.meta.env.DEV`) — not exposed to production users. The ReelScore is a single number; users don't need to see the formula.
+- Hover any ReelScore badge to see a tooltip breakdown of all source scores (e.g., "IMDb: 88 | RT: 80 | Metacritic: 67 | Letterboxd: 86 | Trakt: 87 | TMDB: 84").
+- If logged in, also shows personalization adjustment metrics (future).
 
 ### Hidden Titles
 
@@ -362,7 +366,7 @@ Notifications are detected **lazily**, not via background cron jobs:
 ## API Endpoints
 
 ### Public (no auth)
-- `GET /api/feed?section=trending|new|theaters&type=movie|tv|all&genre=X&sort=X&page=X` — Discovery feed fragments (HTMX partial)
+- `GET /api/feed?type=movie|tv|all&page=X` — Unified discovery feed fragments (HTMX partial). Blends all TMDB sources, deduped, sorted by popularity.
 - `GET /api/search?q=X&type=X&genre=X&page=X` — Search results (HTMX partial)
 - `GET /api/title/{tmdb_id}?type=movie|tv` — Title modal content (HTMX partial)
 - `GET /api/scores/{tmdb_id}?type=movie|tv` — Score breakdown JSON

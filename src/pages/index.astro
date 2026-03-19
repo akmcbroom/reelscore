@@ -1,7 +1,9 @@
 ---
 /**
- * Home page — Discovery feeds.
- * Renders initial feed data server-side, then uses HTMX for pagination.
+ * Home page — Unified discovery feed.
+ * Blends Trending + Now Playing + On The Air + Upcoming from TMDB,
+ * deduplicates by TMDB ID, and sorts by popularity.
+ * Renders initial data server-side, then uses HTMX for pagination.
  * See CLAUDE.md Discovery Feeds.
  */
 
@@ -11,8 +13,11 @@ import FeedSection from "../components/FeedSection.astro";
 import {
   getTrending,
   getNowPlaying,
+  getOnTheAir,
+  getUpcoming,
   getDisplayTitle,
   getReleaseDate,
+  type TmdbTrendingItem,
 } from "../lib/tmdb.ts";
 import { getScoresBatched } from "../lib/mdblist.ts";
 import { calculateReelScore } from "../lib/scoring.ts";
@@ -22,84 +27,70 @@ const apiKey = env.TMDB_API_KEY;
 const mdblistKey = env.MDBLIST_API_KEY;
 const kv = env.SCORE_CACHE;
 
-// Fetch initial page of each feed section in parallel (TMDB is fast)
-const [trendingData, theatersData] = await Promise.all([
+// Fetch page 1 from all TMDB sources in parallel
+const [trendingData, nowPlayingData, onTheAirData, upcomingData] = await Promise.all([
   getTrending(apiKey, 1),
   getNowPlaying(apiKey, 1),
+  getOnTheAir(apiKey, 1),
+  getUpcoming(apiKey, 1),
 ]);
 
-const trendingItems = trendingData?.results ?? [];
-const theatersItems = theatersData?.results ?? [];
+// Blend and deduplicate by TMDB ID
+const seen = new Set<number>();
+const combined: TmdbTrendingItem[] = [];
 
-// Fetch scores in rate-limited batches (MDbList has strict rate limits)
-const allItems = [
-  ...trendingItems.map((item) => ({
-    tmdbId: item.id,
-    mediaType: (item.media_type ?? "movie") as "movie" | "tv",
-    releaseDate: getReleaseDate(item) ?? null,
-  })),
-  ...theatersItems.map((item) => ({
-    tmdbId: item.id,
-    mediaType: "movie" as const,
-    releaseDate: getReleaseDate(item) ?? null,
-  })),
-];
-
-const allScoreData = await getScoresBatched(kv, mdblistKey, allItems);
-
-// Split results back into per-section score arrays
-const trendingScores = allScoreData.slice(0, trendingItems.length).map((d) => {
-  if (d) {
-    const result = calculateReelScore(d.scores);
-    return result.score;
+for (const result of [
+  ...(trendingData?.results ?? []),
+  ...(nowPlayingData?.results ?? []),
+  ...(onTheAirData?.results ?? []),
+  ...(upcomingData?.results ?? []),
+]) {
+  if (!seen.has(result.id)) {
+    seen.add(result.id);
+    combined.push(result);
   }
-  return null;
-});
+}
 
-const theatersScores = allScoreData.slice(trendingItems.length).map((d) => {
-  if (d) {
-    const result = calculateReelScore(d.scores);
-    return result.score;
-  }
-  return null;
+// Sort by popularity descending
+combined.sort((a, b) => b.popularity - a.popularity);
+
+// Fetch scores in rate-limited batches
+const scoreInputs = combined.map((item) => ({
+  tmdbId: item.id,
+  mediaType: (item.media_type ?? "movie") as "movie" | "tv",
+  releaseDate: getReleaseDate(item) ?? null,
+}));
+
+const allScoreData = await getScoresBatched(kv, mdblistKey, scoreInputs);
+
+// Calculate ReelScores from fetched data
+const scoredItems = combined.map((item, i) => {
+  const scoreData = allScoreData[i];
+  const result = scoreData ? calculateReelScore(scoreData.scores) : null;
+
+  return {
+    item,
+    score: result?.score ?? null,
+    sources: result?.sources ?? [],
+  };
 });
 ---
 
 <Layout title="Home">
   <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-    {/* Trending */}
     <FeedSection
-      title="Trending"
-      section="trending"
-      loadMoreUrl="/api/feed?section=trending&page=2"
+      section="feed"
+      loadMoreUrl="/api/feed?page=2"
     >
-      {trendingItems.map((item, i) => (
+      {scoredItems.map(({ item, score, sources }) => (
         <TitleCard
           tmdbId={item.id}
           title={getDisplayTitle(item)}
           posterPath={item.poster_path}
-          mediaType={item.media_type as "movie" | "tv"}
+          mediaType={(item.media_type ?? "movie") as "movie" | "tv"}
           releaseDate={getReleaseDate(item)}
-          score={trendingScores[i] ?? null}
-          voteCount={item.vote_count}
-        />
-      ))}
-    </FeedSection>
-
-    {/* In Theaters */}
-    <FeedSection
-      title="In Theaters"
-      section="theaters"
-      loadMoreUrl="/api/feed?section=theaters&page=2"
-    >
-      {theatersItems.map((item, i) => (
-        <TitleCard
-          tmdbId={item.id}
-          title={getDisplayTitle(item)}
-          posterPath={item.poster_path}
-          mediaType={"movie"}
-          releaseDate={getReleaseDate(item)}
-          score={theatersScores[i] ?? null}
+          score={score}
+          sources={sources}
           voteCount={item.vote_count}
         />
       ))}

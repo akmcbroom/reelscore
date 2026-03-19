@@ -1,13 +1,15 @@
 /**
- * Feed API endpoint — serves HTMX HTML partials for discovery feed sections.
+ * Feed API endpoint — serves HTMX HTML partials for the unified discovery feed.
  *
  * Query params:
- *   section: "trending" | "new" | "theaters" (required)
  *   type: "movie" | "tv" | "all" (default: "all")
  *   page: page number (default: 1)
  *
+ * Blends Trending + Now Playing + On The Air + Upcoming from TMDB,
+ * deduplicates by TMDB ID, and sorts by popularity.
+ *
  * Returns HTML fragments (TitleCard markup) for HTMX to swap into the page.
- * See CLAUDE.md Discovery Feeds and API Endpoints.
+ * See CLAUDE.md Discovery Feeds.
  */
 
 import type { APIRoute } from "astro";
@@ -23,7 +25,7 @@ import {
   type TmdbTrendingItem,
 } from "../../lib/tmdb.ts";
 import { getScoresBatched } from "../../lib/mdblist.ts";
-import { calculateReelScore } from "../../lib/scoring.ts";
+import { calculateReelScore, getSourceLabel } from "../../lib/scoring.ts";
 
 /**
  * Renders a single TitleCard as an HTML string.
@@ -35,8 +37,10 @@ function renderTitleCard(item: {
   title: string;
   posterPath: string | null;
   mediaType: "movie" | "tv";
-  releaseDate: string | undefined;
+  releaseDate: string | null;
   score: number | null;
+  isUnreleased: boolean;
+  sources: Array<{ source: string; normalizedScore: number }>;
 }): string {
   const posterUrl = getImageUrl(item.posterPath, "poster", "medium");
   const year = item.releaseDate
@@ -46,17 +50,28 @@ function renderTitleCard(item: {
   const typeBadgeClass =
     item.mediaType === "tv" ? "badge-secondary" : "badge-outline";
 
-  // Score pill color
+  // Score pill — clock icon for unreleased, score for released
   let scoreColorClass = "bg-surface-600 text-white/50";
-  let scoreDisplay = "—";
-  if (item.score !== null) {
+  let scoreDisplay: string;
+  let scoreTitle: string;
+
+  if (item.isUnreleased) {
+    // Lucide Clock icon SVG (18x18 to fit the pill)
+    scoreDisplay = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+    scoreTitle = "Not yet released";
+  } else if (item.score !== null) {
     scoreDisplay = String(item.score);
     if (item.score >= 85) scoreColorClass = "bg-score-gold text-black";
     else if (item.score >= 70) scoreColorClass = "bg-score-green text-black";
     else if (item.score >= 60) scoreColorClass = "bg-score-yellow text-black";
     else scoreColorClass = "bg-score-red text-white";
+    scoreTitle = `ReelScore: ${item.score}`;
+  } else {
+    scoreDisplay = "—";
+    scoreTitle = "Not enough ratings";
   }
 
+  // Lucide Video icon SVG for poster placeholder
   const posterHtml = posterUrl
     ? `<img src="${posterUrl}" alt="${item.title.replace(/"/g, "&quot;")}" loading="lazy" width="342" height="513" class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />`
     : `<div class="flex h-full w-full items-center justify-center text-white/20">
@@ -72,7 +87,7 @@ function renderTitleCard(item: {
         ${posterHtml}
         <div class="absolute -top-0 left-1/2 -translate-x-1/2 translate-y-2 z-10">
           <span class="inline-flex items-center justify-center rounded-full font-bold tabular-nums text-sm px-3 py-1 min-w-10 ${scoreColorClass}"
-                title="${item.score !== null ? `ReelScore: ${item.score}` : "Not enough ratings"}">
+                title="${scoreTitle}">
             ${scoreDisplay}
           </span>
         </div>
@@ -87,7 +102,6 @@ function renderTitleCard(item: {
 
 export const GET: APIRoute = async ({ request }) => {
   const url = new URL(request.url);
-  const section = url.searchParams.get("section") ?? "trending";
   const type = url.searchParams.get("type") ?? "all";
   const page = parseInt(url.searchParams.get("page") ?? "1", 10);
 
@@ -95,58 +109,43 @@ export const GET: APIRoute = async ({ request }) => {
   const mdblistKey = env.MDBLIST_API_KEY;
   const kv = env.SCORE_CACHE;
 
-  // Fetch titles from TMDB based on section
-  let items: TmdbTrendingItem[] = [];
+  // Fetch from all TMDB sources in parallel for this page
+  const [trendingData, nowPlayingData, onTheAirData, upcomingData] =
+    await Promise.all([
+      getTrending(apiKey, page),
+      getNowPlaying(apiKey, page),
+      getOnTheAir(apiKey, page),
+      getUpcoming(apiKey, page),
+    ]);
 
-  switch (section) {
-    case "trending": {
-      const data = await getTrending(apiKey, page);
-      items = data?.results ?? [];
-      break;
-    }
-    case "theaters": {
-      const data = await getNowPlaying(apiKey, page);
-      items = data?.results ?? [];
-      break;
-    }
-    case "new": {
-      // "New Releases" = blend of now_playing + on_the_air + upcoming
-      // Fetch all in parallel, deduplicate by TMDB ID
-      const [nowPlaying, onTheAir, upcoming] = await Promise.all([
-        getNowPlaying(apiKey, page),
-        getOnTheAir(apiKey, page),
-        getUpcoming(apiKey, page),
-      ]);
+  // Blend and deduplicate by TMDB ID
+  const seen = new Set<number>();
+  const combined: TmdbTrendingItem[] = [];
 
-      const seen = new Set<number>();
-      const combined: TmdbTrendingItem[] = [];
-
-      for (const result of [
-        ...(nowPlaying?.results ?? []),
-        ...(onTheAir?.results ?? []),
-        ...(upcoming?.results ?? []),
-      ]) {
-        if (!seen.has(result.id)) {
-          seen.add(result.id);
-          combined.push(result);
-        }
-      }
-
-      // Sort by popularity descending
-      combined.sort((a, b) => b.popularity - a.popularity);
-      items = combined;
-      break;
+  for (const result of [
+    ...(trendingData?.results ?? []),
+    ...(nowPlayingData?.results ?? []),
+    ...(onTheAirData?.results ?? []),
+    ...(upcomingData?.results ?? []),
+  ]) {
+    if (!seen.has(result.id)) {
+      seen.add(result.id);
+      combined.push(result);
     }
   }
 
+  // Sort by popularity descending
+  combined.sort((a, b) => b.popularity - a.popularity);
+
   // Filter by media type if specified
+  let items = combined;
   if (type === "movie") {
-    items = items.filter((i) => i.media_type === "movie");
+    items = items.filter((i) => (i.media_type ?? "movie") === "movie");
   } else if (type === "tv") {
     items = items.filter((i) => i.media_type === "tv");
   }
 
-  // Fetch scores in rate-limited batches to avoid MDbList 429 errors
+  // Fetch scores in rate-limited batches
   const scoreInputs = items.map((item) => ({
     tmdbId: item.id,
     mediaType: (item.media_type ?? "movie") as "movie" | "tv",
@@ -155,21 +154,22 @@ export const GET: APIRoute = async ({ request }) => {
 
   const scoreResults = await getScoresBatched(kv, mdblistKey, scoreInputs);
 
+  const now = new Date();
   const scoredItems = items.map((item, i) => {
-    let score: number | null = null;
     const scoreData = scoreResults[i];
-    if (scoreData) {
-      const result = calculateReelScore(scoreData.scores);
-      score = result.score;
-    }
+    const result = scoreData ? calculateReelScore(scoreData.scores) : null;
+    const releaseDateStr = getReleaseDate(item) ?? null;
+    const isUnreleased = releaseDateStr ? new Date(releaseDateStr) > now : false;
 
     return {
       tmdbId: item.id,
       title: getDisplayTitle(item),
       posterPath: item.poster_path,
       mediaType: (item.media_type ?? "movie") as "movie" | "tv",
-      releaseDate: getReleaseDate(item) ?? null,
-      score,
+      releaseDate: releaseDateStr,
+      score: result?.score ?? null,
+      isUnreleased,
+      sources: result?.sources ?? [],
     };
   });
 

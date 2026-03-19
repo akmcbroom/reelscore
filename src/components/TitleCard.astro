@@ -1,7 +1,7 @@
 ---
 /**
  * TitleCard — Media card displaying poster, score pill, title, and metadata.
- * This is the primary card used across all feed sections.
+ * This is the primary card used across the discovery feed.
  * See CLAUDE.md Title Card for the full spec.
  *
  * @prop tmdbId - TMDB title ID
@@ -10,11 +10,13 @@
  * @prop mediaType - "movie" or "tv"
  * @prop releaseDate - ISO date string
  * @prop score - ReelScore value (0-100) or null
+ * @prop sources - Individual source scores for dev tooltip
  * @prop voteCount - TMDB vote count (for display context)
  */
 
 import ScoreBadge from "./ScoreBadge.astro";
 import { getImageUrl } from "../lib/tmdb.ts";
+import type { NormalizedScore } from "../lib/mdblist.ts";
 
 interface Props {
   tmdbId: number;
@@ -23,14 +25,18 @@ interface Props {
   mediaType: "movie" | "tv";
   releaseDate?: string;
   score: number | null;
+  sources?: NormalizedScore[];
   voteCount?: number;
 }
 
-const { tmdbId, title, posterPath, mediaType, releaseDate, score, voteCount } = Astro.props;
+const { tmdbId, title, posterPath, mediaType, releaseDate, score, sources = [], voteCount } = Astro.props;
 
 const posterUrl = getImageUrl(posterPath, "poster", "medium");
 const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
 const typeBadgeText = mediaType === "tv" ? "TV" : "Movie";
+
+// Determine if the title is unreleased (release date is in the future)
+const isUnreleased = releaseDate ? new Date(releaseDate) > new Date() : false;
 ---
 
 <div
@@ -60,7 +66,7 @@ const typeBadgeText = mediaType === "tv" ? "TV" : "Movie";
 
     {/* Score pill — centered, overlapping top of poster */}
     <div class="absolute -top-0 left-1/2 -translate-x-1/2 translate-y-2 z-10">
-      <ScoreBadge score={score} size="md" />
+      <ScoreBadge score={score} size="md" isUnreleased={isUnreleased} sources={sources} />
     </div>
   </div>
 

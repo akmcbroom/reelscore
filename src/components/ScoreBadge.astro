@@ -2,18 +2,27 @@
 /**
  * ScoreBadge — The signature ReelScore pill.
  * Displays the score as a color-coded rounded pill.
+ * For unreleased titles, shows a clock icon instead of a score.
+ * In dev mode, hovering shows a tooltip with the 6-source breakdown.
  * See CLAUDE.md Score Display Colors for ranges.
  *
  * @prop score - ReelScore value (0-100), or null if insufficient sources
  * @prop size - "sm" | "md" | "lg" (default: "md")
+ * @prop isUnreleased - Whether the title hasn't been released yet
+ * @prop sources - Individual source scores for dev tooltip (optional)
  */
+
+import { getSourceLabel } from "../lib/scoring.ts";
+import type { NormalizedScore } from "../lib/mdblist.ts";
 
 interface Props {
   score: number | null;
   size?: "sm" | "md" | "lg";
+  isUnreleased?: boolean;
+  sources?: NormalizedScore[];
 }
 
-const { score, size = "md" } = Astro.props;
+const { score, size = "md", isUnreleased = false, sources = [] } = Astro.props;
 
 /** Map score to Tailwind color classes */
 function getColorClasses(score: number): string {
@@ -29,9 +38,33 @@ const sizeClasses = {
   lg: "text-base px-4 py-1.5 min-w-12",
 };
 
-const hasScore = score !== null;
-const colorClass = hasScore ? getColorClasses(score) : "bg-surface-600 text-white/50";
+const iconSizes = { sm: 12, md: 16, lg: 20 };
+
+const hasScore = score !== null && !isUnreleased;
+const colorClass = isUnreleased
+  ? "bg-surface-600 text-white/50"
+  : hasScore
+    ? getColorClasses(score!)
+    : "bg-surface-600 text-white/50";
 const sizeClass = sizeClasses[size];
+const iconSize = iconSizes[size];
+
+// Build dev tooltip text showing source breakdown
+const isDev = import.meta.env.DEV;
+let tooltipText = isUnreleased
+  ? "Not yet released"
+  : hasScore
+    ? `ReelScore: ${score}`
+    : "Not enough ratings";
+
+if (isDev && sources.length > 0) {
+  const breakdown = sources
+    .map((s) => `${getSourceLabel(s.source)}: ${s.normalizedScore}`)
+    .join(" | ");
+  tooltipText = hasScore
+    ? `ReelScore: ${score} (${sources.length} sources)\n${breakdown}`
+    : `Insufficient sources (${sources.length}/2)\n${breakdown}`;
+}
 ---
 
 <span
@@ -40,7 +73,16 @@ const sizeClass = sizeClasses[size];
     colorClass,
     sizeClass,
   ]}
-  title={hasScore ? `ReelScore: ${score}` : "Not enough ratings"}
+  title={tooltipText}
 >
-  {hasScore ? score : "—"}
+  {isUnreleased ? (
+    <svg xmlns="http://www.w3.org/2000/svg" width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ) : hasScore ? (
+    score
+  ) : (
+    "—"
+  )}
 </span>
