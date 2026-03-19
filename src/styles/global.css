@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@import "basecoat-css";
+
+@theme {
+  /* ReelScore brand colors — score range palette */
+  --color-score-red: #ef4444;
+  --color-score-yellow: #eab308;
+  --color-score-green: #22c55e;
+  --color-score-gold: #f59e0b;
+
+  /* Dark theme surface colors */
+  --color-surface-900: #0a0a0a;
+  --color-surface-800: #141414;
+  --color-surface-700: #1e1e1e;
+  --color-surface-600: #2a2a2a;
+}

@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.astro/
+
+# cloudflare
+.wrangler/
+.dev.vars
+
+# code coverage
+coverage/
+*.lcov
+
+# logs
+*.log
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/

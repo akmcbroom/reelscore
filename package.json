@@ -1,0 +1,36 @@
+{
+  "name": "reelscore",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^13.1.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "alpinejs": "^3.15.8",
+    "astro": "^6.0.7",
+    "basecoat-css": "^0.3.11",
+    "better-auth": "^1.5.5",
+    "better-auth-cloudflare": "^0.2.9",
+    "drizzle-orm": "^0.45.1",
+    "htmx.org": "^2.0.8",
+    "tailwindcss": "^4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@types/alpinejs": "^3.13.11",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.75.0"
+  }
+}
