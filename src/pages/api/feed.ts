@@ -16,16 +16,13 @@ import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
   getTrending,
-  getNowPlaying,
-  getOnTheAir,
-  getUpcoming,
   getDisplayTitle,
   getReleaseDate,
   getImageUrl,
   type TmdbTrendingItem,
 } from "../../lib/tmdb.ts";
 import { getScoresBatched } from "../../lib/mdblist.ts";
-import { calculateReelScore, getSourceLabel } from "../../lib/scoring.ts";
+import { calculateReelScore } from "../../lib/scoring.ts";
 
 /**
  * Renders a single TitleCard as an HTML string.
@@ -47,11 +44,9 @@ function renderTitleCard(item: {
     ? new Date(item.releaseDate).getFullYear()
     : null;
   const typeBadgeText = item.mediaType === "tv" ? "TV" : "Movie";
-  const typeBadgeClass =
-    item.mediaType === "tv" ? "badge-secondary" : "badge-outline";
 
   // Score pill — clock icon for unreleased, score for released
-  let scoreColorClass = "bg-surface-600 text-white/50";
+  let scoreColorClass = "bg-black/40 text-white/60";
   let scoreDisplay: string;
   let scoreTitle: string;
 
@@ -86,7 +81,7 @@ function renderTitleCard(item: {
       <div class="relative overflow-hidden rounded-lg bg-surface-700 aspect-[2/3]">
         ${posterHtml}
         <div class="absolute -top-0 left-1/2 -translate-x-1/2 translate-y-2 z-10">
-          <span class="inline-flex items-center justify-center rounded-full font-bold tabular-nums text-sm px-3 py-1 min-w-10 ${scoreColorClass}"
+          <span class="inline-flex items-center justify-center rounded-full font-bold tabular-nums text-sm w-9 h-9 ${scoreColorClass}"
                 title="${scoreTitle}">
             ${scoreDisplay}
           </span>
@@ -94,7 +89,7 @@ function renderTitleCard(item: {
       </div>
       <h3 class="mt-2 text-sm font-medium text-white line-clamp-2 leading-tight">${item.title.replace(/</g, "&lt;")}</h3>
       <div class="mt-1 flex items-center gap-2 text-xs text-white/50">
-        <span class="${typeBadgeClass} text-[10px] px-1.5 py-0">${typeBadgeText}</span>
+        <span class="text-[10px] px-1.5 py-0 rounded border border-white/20 text-white/50">${typeBadgeText}</span>
         ${year ? `<span>${year}</span>` : ""}
       </div>
     </div>`;
@@ -109,36 +104,10 @@ export const GET: APIRoute = async ({ request }) => {
   const mdblistKey = env.MDBLIST_API_KEY;
   const kv = env.SCORE_CACHE;
 
-  // Fetch from all TMDB sources in parallel for this page
-  const [trendingData, nowPlayingData, onTheAirData, upcomingData] =
-    await Promise.all([
-      getTrending(apiKey, page),
-      getNowPlaying(apiKey, page),
-      getOnTheAir(apiKey, page),
-      getUpcoming(apiKey, page),
-    ]);
-
-  // Blend and deduplicate by TMDB ID
-  const seen = new Set<number>();
-  const combined: TmdbTrendingItem[] = [];
-
-  for (const result of [
-    ...(trendingData?.results ?? []),
-    ...(nowPlayingData?.results ?? []),
-    ...(onTheAirData?.results ?? []),
-    ...(upcomingData?.results ?? []),
-  ]) {
-    if (!seen.has(result.id)) {
-      seen.add(result.id);
-      combined.push(result);
-    }
-  }
-
-  // Sort by popularity descending
-  combined.sort((a, b) => b.popularity - a.popularity);
-
-  // Filter by media type if specified
-  let items = combined;
+  // Page 1 is served by index.astro (full blend). For pagination (page 2+),
+  // use only trending to keep responses fast — single TMDB call instead of 4.
+  const trendingData = await getTrending(apiKey, page);
+  let items: TmdbTrendingItem[] = trendingData?.results ?? [];
   if (type === "movie") {
     items = items.filter((i) => (i.media_type ?? "movie") === "movie");
   } else if (type === "tv") {

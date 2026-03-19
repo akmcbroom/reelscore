@@ -77,10 +77,7 @@ const isUnreleased = releaseDate ? new Date(releaseDate) > new Date() : false;
 
   {/* Metadata row: type badge + year */}
   <div class="mt-1 flex items-center gap-2 text-xs text-white/50">
-    <span class:list={[
-      "badge text-[10px] px-1.5 py-0",
-      mediaType === "tv" ? "badge-secondary" : "badge-outline"
-    ]}>
+    <span class="text-[10px] px-1.5 py-0 rounded border border-white/20 text-white/50">
       {typeBadgeText}
     </span>
     {year && <span>{year}</span>}

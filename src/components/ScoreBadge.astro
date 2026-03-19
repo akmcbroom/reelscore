@@ -32,20 +32,21 @@ function getColorClasses(score: number): string {
   return "bg-score-red text-white";
 }
 
+// Fixed square dimensions for a perfect circle with rounded-full
 const sizeClasses = {
-  sm: "text-xs px-2 py-0.5 min-w-8",
-  md: "text-sm px-3 py-1 min-w-10",
-  lg: "text-base px-4 py-1.5 min-w-12",
+  sm: "text-xs w-7 h-7",
+  md: "text-sm w-9 h-9",
+  lg: "text-base w-11 h-11",
 };
 
 const iconSizes = { sm: 12, md: 16, lg: 20 };
 
 const hasScore = score !== null && !isUnreleased;
 const colorClass = isUnreleased
-  ? "bg-surface-600 text-white/50"
+  ? "bg-black/40 text-white/60"
   : hasScore
     ? getColorClasses(score!)
-    : "bg-surface-600 text-white/50";
+    : "bg-black/40 text-white/60";
 const sizeClass = sizeClasses[size];
 const iconSize = iconSizes[size];
 
