@@ -140,8 +140,8 @@ export function clampScore(score: number): number {
 export function getSourceLabel(source: AudienceSource): string {
   const labels: Record<AudienceSource, string> = {
     imdb: "IMDb",
-    tomatoes: "Rotten Tomatoes",
-    metacritic: "Metacritic",
+    popcorn: "Rotten Tomatoes",
+    metacriticuser: "Metacritic",
     letterboxd: "Letterboxd",
     trakt: "Trakt",
     tmdb: "TMDB",

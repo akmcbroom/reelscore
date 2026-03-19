@@ -1,7 +1,10 @@
 /// <reference path="../.astro/types.d.ts" />
 
-type Runtime = import("@astrojs/cloudflare").Runtime<Env>;
-
+/**
+ * Cloudflare Workers environment bindings.
+ * In Astro v6, access via: import { env } from "cloudflare:workers"
+ * NOT via Astro.locals.runtime.env (removed in v6).
+ */
 interface Env {
   DB: D1Database;
   SCORE_CACHE: KVNamespace;
@@ -15,6 +18,7 @@ interface Env {
   APPLE_CLIENT_SECRET: string;
 }
 
-declare namespace App {
-  interface Locals extends Runtime {}
+declare module "cloudflare:workers" {
+  const env: Env;
+  export { env };
 }

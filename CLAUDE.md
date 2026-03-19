@@ -35,6 +35,7 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 
 ### Stack Principles
 
+- **Astro v6 Cloudflare bindings.** Access D1, KV, and secrets via `import { env } from "cloudflare:workers"` — NOT `Astro.locals.runtime.env` (removed in Astro v6). The `cloudflare:workers` module is declared in `src/env.d.ts`.
 - **No build tooling beyond Astro.** No Webpack, no Vite plugins, no bundler config. Astro handles everything.
 - **File-based routing.** Astro's `src/pages/` directory defines all routes. HTMX partials are served from `src/pages/api/` as Astro endpoints returning HTML fragments.
 - **Minimal Alpine.js.** Alpine handles client-side state only where HTMX can't (modals, dropdown toggles, local UI state). Don't reach for Alpine when HTMX `hx-swap` can do the job.
@@ -139,18 +140,20 @@ reelscore/
 
 All 6 audience scores sourced via **MDbList API** (paid plan):
 
-| # | Source                         |
-| - | ------------------------------ |
-| 1 | IMDb User Rating               |
-| 2 | Rotten Tomatoes Audience Score  |
-| 3 | Metacritic User Score           |
-| 4 | Letterboxd                     |
-| 5 | Trakt                          |
-| 6 | TMDB Audience Score             |
+| # | Source                         | MDbList key      | `value` scale |
+| - | ------------------------------ | ---------------- | ------------- |
+| 1 | IMDb User Rating               | `imdb`           | 0–10          |
+| 2 | Rotten Tomatoes Audience Score  | `popcorn`        | 0–100         |
+| 3 | Metacritic User Score           | `metacriticuser` | 0–10          |
+| 4 | Letterboxd                     | `letterboxd`     | 0–5           |
+| 5 | Trakt                          | `trakt`          | 0–100         |
+| 6 | TMDB Audience Score             | `tmdb`           | 0–100         |
+
+**Important:** MDbList also returns `tomatoes` (critics Tomatometer) and `metacritic` (critics score) — we explicitly filter these OUT. We only use the audience/user variants listed above.
 
 ### Calculation
 
-1. Normalize each source score to 0–100 scale.
+1. Use MDbList's pre-normalized `score` field (0–100) for each source. Fall back to manual normalization of `value` only if `score` is missing.
 2. Require **minimum 2 sources** to display a ReelScore. Titles with 0–1 sources are not shown.
 3. Average all available normalized scores = **Base ReelScore**.
 4. Apply personalization adjustments (see below) = **Personalized ReelScore** (logged-in users only).
@@ -420,7 +423,12 @@ Even though everything is v1, build in this sequence so each layer has its found
 ### MDbList API
 - **Paid plan** — provides **all 6 audience scores** per title, including the TMDB audience score.
 - MDbList is the **sole source for all score data**. We do NOT hit TMDB for scores.
-- Rate limits: confirm current limits on paid plan and build request throttling accordingly.
+- **Base URL:** `https://api.mdblist.com` — uses path-based routing, NOT query parameters.
+- **Lookup format:** `GET /tmdb/movie/{tmdb_id}?apikey=KEY` or `GET /imdb/show/{imdb_id}?apikey=KEY`
+  - Media type in path: `movie` or `show` (not `tv`).
+  - The old query-parameter format (`?tm=123&m=movie`) is deprecated and returns the API homepage.
+- **Response:** Each title returns a `ratings` array. Each rating has `source`, `value` (raw scale), `score` (pre-normalized 0–100), and `votes`.
+- **Rate limits:** Depend on supporter tier. Check via `GET /user`. Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`. Exceeding returns 429. Batched fetching (4 concurrent, 250ms delay) works reliably.
 - **Risk:** Single point of failure for score data. No fallback currently. If MDbList goes down, scores can't refresh (cached scores still display). Consider diversification strategy in v2.
 
 ### TMDB API

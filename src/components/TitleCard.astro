@@ -1,0 +1,82 @@
+---
+/**
+ * TitleCard — Media card displaying poster, score pill, title, and metadata.
+ * This is the primary card used across all feed sections.
+ * See CLAUDE.md Title Card for the full spec.
+ *
+ * @prop tmdbId - TMDB title ID
+ * @prop title - Display title
+ * @prop posterPath - TMDB poster path (or null for placeholder)
+ * @prop mediaType - "movie" or "tv"
+ * @prop releaseDate - ISO date string
+ * @prop score - ReelScore value (0-100) or null
+ * @prop voteCount - TMDB vote count (for display context)
+ */
+
+import ScoreBadge from "./ScoreBadge.astro";
+import { getImageUrl } from "../lib/tmdb.ts";
+
+interface Props {
+  tmdbId: number;
+  title: string;
+  posterPath: string | null;
+  mediaType: "movie" | "tv";
+  releaseDate?: string;
+  score: number | null;
+  voteCount?: number;
+}
+
+const { tmdbId, title, posterPath, mediaType, releaseDate, score, voteCount } = Astro.props;
+
+const posterUrl = getImageUrl(posterPath, "poster", "medium");
+const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
+const typeBadgeText = mediaType === "tv" ? "TV" : "Movie";
+---
+
+<div
+  class="group relative flex flex-col"
+  data-tmdb-id={tmdbId}
+  data-media-type={mediaType}
+>
+  {/* Poster with score pill overlay */}
+  <div class="relative overflow-hidden rounded-lg bg-surface-700 aspect-[2/3]">
+    {posterUrl ? (
+      <img
+        src={posterUrl}
+        alt={title}
+        loading="lazy"
+        width="342"
+        height="513"
+        class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+      />
+    ) : (
+      <div class="flex h-full w-full items-center justify-center text-white/20">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+          <rect x="2" y="6" width="14" height="12" rx="2" />
+        </svg>
+      </div>
+    )}
+
+    {/* Score pill — centered, overlapping top of poster */}
+    <div class="absolute -top-0 left-1/2 -translate-x-1/2 translate-y-2 z-10">
+      <ScoreBadge score={score} size="md" />
+    </div>
+  </div>
+
+  {/* Title */}
+  <h3 class="mt-2 text-sm font-medium text-white line-clamp-2 leading-tight">
+    {title}
+  </h3>
+
+  {/* Metadata row: type badge + year */}
+  <div class="mt-1 flex items-center gap-2 text-xs text-white/50">
+    <span class:list={[
+      "badge text-[10px] px-1.5 py-0",
+      mediaType === "tv" ? "badge-secondary" : "badge-outline"
+    ]}>
+      {typeBadgeText}
+    </span>
+    {year && <span>{year}</span>}
+  </div>
+</div>

@@ -41,9 +41,9 @@ describe("normalizeScore", () => {
     expect(normalizeScore(1.0, "imdb")).toBe(10);
   });
 
-  it("normalizes TMDB 0-10 scale to 0-100", () => {
-    expect(normalizeScore(8.5, "tmdb")).toBe(85);
-    expect(normalizeScore(6.0, "tmdb")).toBe(60);
+  it("passes through TMDB (already 0-100)", () => {
+    expect(normalizeScore(85, "tmdb")).toBe(85);
+    expect(normalizeScore(60, "tmdb")).toBe(60);
   });
 
   it("normalizes Letterboxd 0-5 scale to 0-100", () => {
@@ -53,12 +53,13 @@ describe("normalizeScore", () => {
   });
 
   it("passes through Rotten Tomatoes (already 0-100)", () => {
-    expect(normalizeScore(85, "tomatoes")).toBe(85);
-    expect(normalizeScore(42, "tomatoes")).toBe(42);
+    expect(normalizeScore(85, "popcorn")).toBe(85);
+    expect(normalizeScore(42, "popcorn")).toBe(42);
   });
 
-  it("passes through Metacritic (already 0-100)", () => {
-    expect(normalizeScore(73, "metacritic")).toBe(73);
+  it("normalizes Metacritic User 0-10 scale to 0-100", () => {
+    expect(normalizeScore(7.3, "metacriticuser")).toBe(73);
+    expect(normalizeScore(8.9, "metacriticuser")).toBe(89);
   });
 
   it("passes through Trakt (already 0-100)", () => {
@@ -68,9 +69,9 @@ describe("normalizeScore", () => {
   it("returns null for zero values (zero = no data)", () => {
     // Raw 0 from MDbList means no data, not an actual score — see CLAUDE.md
     expect(normalizeScore(0, "imdb")).toBeNull();
-    expect(normalizeScore(0, "tomatoes")).toBeNull();
+    expect(normalizeScore(0, "popcorn")).toBeNull();
     expect(normalizeScore(0, "letterboxd")).toBeNull();
-    expect(normalizeScore(0, "metacritic")).toBeNull();
+    expect(normalizeScore(0, "metacriticuser")).toBeNull();
     expect(normalizeScore(0, "trakt")).toBeNull();
     expect(normalizeScore(0, "tmdb")).toBeNull();
   });
@@ -95,21 +96,21 @@ describe("parseRatings", () => {
   it("filters to only the 6 audience sources", () => {
     const ratings: MDbListRating[] = [
       { source: "imdb", value: 7.5, score: 75, votes: 10000 },
-      { source: "tomatoes", value: 80, score: 80, votes: 5000 },
+      { source: "popcorn", value: 80, score: 80, votes: 5000 },
       { source: "rogerebert", value: 3, score: 60, votes: 1 }, // not an audience source
-      { source: "metacritic", value: 70, score: 70, votes: 200 },
+      { source: "metacriticuser", value: 7.0, score: 70, votes: 200 },
     ];
 
     const result = parseRatings(ratings);
 
     expect(result).toHaveLength(3);
-    expect(result.map((r) => r.source)).toEqual(["imdb", "tomatoes", "metacritic"]);
+    expect(result.map((r) => r.source)).toEqual(["imdb", "popcorn", "metacriticuser"]);
   });
 
   it("excludes sources with zero values (no data)", () => {
     const ratings: MDbListRating[] = [
       { source: "imdb", value: 7.5, score: 75, votes: 10000 },
-      { source: "tomatoes", value: 0, score: 0, votes: 0 }, // no data
+      { source: "popcorn", value: 0, score: 0, votes: 0 }, // no data
       { source: "trakt", value: 85, score: 85, votes: 3000 },
     ];
 
@@ -119,18 +120,19 @@ describe("parseRatings", () => {
     expect(result.map((r) => r.source)).toEqual(["imdb", "trakt"]);
   });
 
-  it("normalizes values correctly for each source", () => {
+  it("uses MDbList pre-normalized score field for each source", () => {
     const ratings: MDbListRating[] = [
       { source: "imdb", value: 8.0, score: 80, votes: 50000 },
       { source: "letterboxd", value: 4.0, score: 80, votes: 20000 },
-      { source: "tmdb", value: 7.5, score: 75, votes: 15000 },
+      { source: "tmdb", value: 75, score: 75, votes: 15000 },
     ];
 
     const result = parseRatings(ratings);
 
-    expect(result[0]!.normalizedScore).toBe(80); // 8.0 * 10
-    expect(result[1]!.normalizedScore).toBe(80); // 4.0 * 20
-    expect(result[2]!.normalizedScore).toBe(75); // 7.5 * 10
+    // parseRatings prefers the pre-normalized score field from MDbList
+    expect(result[0]!.normalizedScore).toBe(80);
+    expect(result[1]!.normalizedScore).toBe(80);
+    expect(result[2]!.normalizedScore).toBe(75);
   });
 
   it("returns empty array when no valid audience sources", () => {
@@ -154,8 +156,8 @@ describe("calculateReelScore", () => {
   it("averages scores from multiple sources", () => {
     const scores = [
       makeScore("imdb", 80),
-      makeScore("tomatoes", 70),
-      makeScore("metacritic", 60),
+      makeScore("popcorn", 70),
+      makeScore("metacriticuser", 60),
     ];
 
     const result = calculateReelScore(scores);
@@ -197,8 +199,8 @@ describe("calculateReelScore", () => {
   it("works with all 6 sources", () => {
     const scores = [
       makeScore("imdb", 80),
-      makeScore("tomatoes", 75),
-      makeScore("metacritic", 70),
+      makeScore("popcorn", 75),
+      makeScore("metacriticuser", 70),
       makeScore("letterboxd", 85),
       makeScore("trakt", 78),
       makeScore("tmdb", 72),
@@ -212,7 +214,7 @@ describe("calculateReelScore", () => {
   });
 
   it("rounds the average to nearest integer", () => {
-    const scores = [makeScore("imdb", 73), makeScore("tomatoes", 74)];
+    const scores = [makeScore("imdb", 73), makeScore("popcorn", 74)];
 
     const result = calculateReelScore(scores);
 
@@ -230,7 +232,7 @@ describe("calculateReelScore", () => {
   it("includes source details in result", () => {
     const scores = [
       makeScore("imdb", 80, 8.0, 50000),
-      makeScore("tomatoes", 70, 70, 5000),
+      makeScore("popcorn", 70, 70, 5000),
     ];
 
     const result = calculateReelScore(scores);
@@ -291,10 +293,10 @@ describe("clampScore", () => {
 });
 
 describe("getSourceLabel", () => {
-  it("returns human-readable labels", () => {
+  it("returns human-readable labels for audience sources", () => {
     expect(getSourceLabel("imdb")).toBe("IMDb");
-    expect(getSourceLabel("tomatoes")).toBe("Rotten Tomatoes");
-    expect(getSourceLabel("metacritic")).toBe("Metacritic");
+    expect(getSourceLabel("popcorn")).toBe("Rotten Tomatoes");
+    expect(getSourceLabel("metacriticuser")).toBe("Metacritic");
     expect(getSourceLabel("letterboxd")).toBe("Letterboxd");
     expect(getSourceLabel("trakt")).toBe("Trakt");
     expect(getSourceLabel("tmdb")).toBe("TMDB");

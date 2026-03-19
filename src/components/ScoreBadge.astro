@@ -1,0 +1,46 @@
+---
+/**
+ * ScoreBadge — The signature ReelScore pill.
+ * Displays the score as a color-coded rounded pill.
+ * See CLAUDE.md Score Display Colors for ranges.
+ *
+ * @prop score - ReelScore value (0-100), or null if insufficient sources
+ * @prop size - "sm" | "md" | "lg" (default: "md")
+ */
+
+interface Props {
+  score: number | null;
+  size?: "sm" | "md" | "lg";
+}
+
+const { score, size = "md" } = Astro.props;
+
+/** Map score to Tailwind color classes */
+function getColorClasses(score: number): string {
+  if (score >= 85) return "bg-score-gold text-black";
+  if (score >= 70) return "bg-score-green text-black";
+  if (score >= 60) return "bg-score-yellow text-black";
+  return "bg-score-red text-white";
+}
+
+const sizeClasses = {
+  sm: "text-xs px-2 py-0.5 min-w-8",
+  md: "text-sm px-3 py-1 min-w-10",
+  lg: "text-base px-4 py-1.5 min-w-12",
+};
+
+const hasScore = score !== null;
+const colorClass = hasScore ? getColorClasses(score) : "bg-surface-600 text-white/50";
+const sizeClass = sizeClasses[size];
+---
+
+<span
+  class:list={[
+    "inline-flex items-center justify-center rounded-full font-bold tabular-nums",
+    colorClass,
+    sizeClass,
+  ]}
+  title={hasScore ? `ReelScore: ${score}` : "Not enough ratings"}
+>
+  {hasScore ? score : "—"}
+</span>

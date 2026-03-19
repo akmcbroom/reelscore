@@ -53,8 +53,8 @@ export interface MDbListResponse {
  */
 export const AUDIENCE_SOURCES = [
   "imdb",
-  "tomatoes",
-  "metacritic",
+  "popcorn",
+  "metacriticuser",
   "letterboxd",
   "trakt",
   "tmdb",
@@ -85,15 +85,17 @@ export interface CachedScoreData {
 // --- Normalization ---
 
 /**
- * Normalizes a raw score value to the 0-100 scale based on its source.
+ * Normalizes a raw `value` field to the 0-100 scale based on its source.
+ * This is a fallback — `parseRatings()` prefers MDbList's pre-normalized
+ * `score` field. See that function's JSDoc for details.
  *
- * Different sources use different scales:
+ * Different sources use different scales for the `value` field:
  * - IMDb: 0-10 (multiply by 10)
- * - Rotten Tomatoes: 0-100 (already normalized)
- * - Metacritic: 0-100 (already normalized)
+ * - Rotten Tomatoes Audience (popcorn): 0-100 (already normalized)
+ * - Metacritic User (metacriticuser): 0-10 (multiply by 10)
  * - Letterboxd: 0-5 (multiply by 20)
  * - Trakt: 0-100 (already normalized, comes as percentage)
- * - TMDB: 0-10 (multiply by 10)
+ * - TMDB: 0-100 (already normalized — NOT 0-10 like TMDB's own API)
  *
  * A raw value of 0 means "no data" — returns null.
  * See CLAUDE.md: "Zero score = nil"
@@ -108,14 +110,14 @@ export function normalizeScore(value: number, source: string): number | null {
 
   switch (source) {
     case "imdb":
-    case "tmdb":
+    case "metacriticuser":
       // 0-10 scale → multiply by 10
       return Math.round(value * 10);
     case "letterboxd":
       // 0-5 scale → multiply by 20
       return Math.round(value * 20);
-    case "tomatoes":
-    case "metacritic":
+    case "popcorn":
+    case "tmdb":
     case "trakt":
       // Already on 0-100 scale
       return Math.round(value);
@@ -130,12 +132,13 @@ const MDBLIST_API_BASE = "https://api.mdblist.com";
 
 /**
  * Fetches score data from MDbList for a given title.
+ * Uses path-based routing: /tmdb/movie/{id} or /imdb/movie/{id}
  * Prefers IMDb ID lookup for accuracy; falls back to TMDB ID.
  *
  * @param apiKey - MDbList API key
  * @param tmdbId - TMDB title ID
  * @param imdbId - IMDb ID (e.g., "tt1234567") if known — preferred for accuracy
- * @param mediaType - "movie" or "tv" (needed for TMDB ID lookups to disambiguate)
+ * @param mediaType - "movie" or "tv" (needed to build the correct API path)
  * @returns Parsed API response or null if the request fails
  */
 export async function fetchMDbListScores(
@@ -144,18 +147,16 @@ export async function fetchMDbListScores(
   imdbId?: string | null,
   mediaType?: "movie" | "tv"
 ): Promise<MDbListResponse | null> {
+  // MDbList uses "show" not "tv" in its path
+  const mdbMediaType = mediaType === "tv" ? "show" : "movie";
   let url: string;
 
   if (imdbId) {
     // IMDb ID lookup is more accurate — see CLAUDE.md
-    url = `${MDBLIST_API_BASE}/?apikey=${apiKey}&i=${imdbId}`;
+    url = `${MDBLIST_API_BASE}/imdb/${mdbMediaType}/${imdbId}?apikey=${apiKey}`;
   } else {
     // Fall back to TMDB ID
-    url = `${MDBLIST_API_BASE}/?apikey=${apiKey}&tm=${tmdbId}`;
-    if (mediaType) {
-      // Append media type to disambiguate movies vs TV shows with same TMDB ID
-      url += `&m=${mediaType === "movie" ? "movie" : "show"}`;
-    }
+    url = `${MDBLIST_API_BASE}/tmdb/${mdbMediaType}/${tmdbId}?apikey=${apiKey}`;
   }
 
   try {
@@ -180,6 +181,11 @@ export async function fetchMDbListScores(
  * Parses MDbList ratings into normalized scores, filtering to only
  * the 6 audience sources we care about.
  *
+ * Uses MDbList's pre-normalized `score` field (0-100) rather than
+ * manually normalizing `value`, because MDbList already handles
+ * the different source scales correctly. Falls back to our own
+ * `normalizeScore()` if the `score` field is missing.
+ *
  * @param ratings - Raw ratings array from MDbList API response
  * @returns Array of normalized scores (only sources with valid data)
  */
@@ -192,15 +198,16 @@ export function parseRatings(ratings: MDbListRating[]): NormalizedScore[] {
       continue;
     }
 
-    const score = normalizeScore(rating.value, rating.source);
+    // Prefer MDbList's pre-normalized score (0-100), fall back to manual normalization
+    const score = rating.score ?? normalizeScore(rating.value, rating.source);
 
-    // Skip sources with no data (raw value was 0)
-    if (score === null) continue;
+    // Skip sources with no data (raw value was 0 or score is null/0)
+    if (score === null || score === 0) continue;
 
     normalized.push({
       source: rating.source as AudienceSource,
       rawValue: rating.value,
-      normalizedScore: score,
+      normalizedScore: Math.round(score),
       votes: rating.votes,
     });
   }
@@ -245,6 +252,10 @@ export async function getScores(
   const response = await fetchMDbListScores(apiKey, tmdbId, imdbId, mediaType);
   if (!response) return null;
 
+  // Guard: MDbList may return responses without a ratings array
+  // (e.g., error objects, titles not found, or unexpected shapes)
+  if (!response.ratings || !Array.isArray(response.ratings)) return null;
+
   // Parse and normalize the ratings
   const scores = parseRatings(response.ratings);
 
@@ -265,4 +276,53 @@ export async function getScores(
   await kvPut(kv, cacheKey, scoreData, ttl);
 
   return scoreData;
+}
+
+// --- Batched Score Fetching ---
+
+/**
+ * Fetches scores for multiple titles in rate-limited batches.
+ * MDbList has strict rate limits, so we process titles in small
+ * groups with a delay between each group to avoid 429 errors.
+ *
+ * @param kv - Cloudflare KV namespace binding
+ * @param apiKey - MDbList API key
+ * @param titles - Array of title info to fetch scores for
+ * @param batchSize - Number of concurrent requests per batch (default: 4)
+ * @param delayMs - Delay between batches in milliseconds (default: 250)
+ * @returns Array of scores in the same order as input titles
+ */
+export async function getScoresBatched(
+  kv: KVNamespace,
+  apiKey: string,
+  titles: Array<{
+    tmdbId: number;
+    mediaType: "movie" | "tv";
+    releaseDate: string | null;
+    imdbId?: string | null;
+  }>,
+  batchSize = 4,
+  delayMs = 250
+): Promise<(CachedScoreData | null)[]> {
+  const results: (CachedScoreData | null)[] = new Array(titles.length).fill(null);
+
+  for (let i = 0; i < titles.length; i += batchSize) {
+    const batch = titles.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map((t) =>
+        getScores(kv, apiKey, t.tmdbId, t.releaseDate, t.imdbId, t.mediaType)
+      )
+    );
+
+    for (let j = 0; j < batchResults.length; j++) {
+      results[i + j] = batchResults[j] ?? null;
+    }
+
+    // Delay between batches (skip delay after last batch)
+    if (i + batchSize < titles.length) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  return results;
 }

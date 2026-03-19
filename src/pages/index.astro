@@ -1,14 +1,108 @@
 ---
+/**
+ * Home page — Discovery feeds.
+ * Renders initial feed data server-side, then uses HTMX for pagination.
+ * See CLAUDE.md Discovery Feeds.
+ */
+
 import Layout from "../layouts/Layout.astro";
+import TitleCard from "../components/TitleCard.astro";
+import FeedSection from "../components/FeedSection.astro";
+import {
+  getTrending,
+  getNowPlaying,
+  getDisplayTitle,
+  getReleaseDate,
+} from "../lib/tmdb.ts";
+import { getScoresBatched } from "../lib/mdblist.ts";
+import { calculateReelScore } from "../lib/scoring.ts";
+import { env } from "cloudflare:workers";
+
+const apiKey = env.TMDB_API_KEY;
+const mdblistKey = env.MDBLIST_API_KEY;
+const kv = env.SCORE_CACHE;
+
+// Fetch initial page of each feed section in parallel (TMDB is fast)
+const [trendingData, theatersData] = await Promise.all([
+  getTrending(apiKey, 1),
+  getNowPlaying(apiKey, 1),
+]);
+
+const trendingItems = trendingData?.results ?? [];
+const theatersItems = theatersData?.results ?? [];
+
+// Fetch scores in rate-limited batches (MDbList has strict rate limits)
+const allItems = [
+  ...trendingItems.map((item) => ({
+    tmdbId: item.id,
+    mediaType: (item.media_type ?? "movie") as "movie" | "tv",
+    releaseDate: getReleaseDate(item) ?? null,
+  })),
+  ...theatersItems.map((item) => ({
+    tmdbId: item.id,
+    mediaType: "movie" as const,
+    releaseDate: getReleaseDate(item) ?? null,
+  })),
+];
+
+const allScoreData = await getScoresBatched(kv, mdblistKey, allItems);
+
+// Split results back into per-section score arrays
+const trendingScores = allScoreData.slice(0, trendingItems.length).map((d) => {
+  if (d) {
+    const result = calculateReelScore(d.scores);
+    return result.score;
+  }
+  return null;
+});
+
+const theatersScores = allScoreData.slice(trendingItems.length).map((d) => {
+  if (d) {
+    const result = calculateReelScore(d.scores);
+    return result.score;
+  }
+  return null;
+});
 ---
 
 <Layout title="Home">
-  <main class="flex min-h-screen items-center justify-center">
-    <div class="text-center">
-      <h1 class="text-4xl font-bold">ReelScore</h1>
-      <p class="mt-2 text-lg text-white/60">
-        Watch what you like, not what the critics like.
-      </p>
-    </div>
+  <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    {/* Trending */}
+    <FeedSection
+      title="Trending"
+      section="trending"
+      loadMoreUrl="/api/feed?section=trending&page=2"
+    >
+      {trendingItems.map((item, i) => (
+        <TitleCard
+          tmdbId={item.id}
+          title={getDisplayTitle(item)}
+          posterPath={item.poster_path}
+          mediaType={item.media_type as "movie" | "tv"}
+          releaseDate={getReleaseDate(item)}
+          score={trendingScores[i] ?? null}
+          voteCount={item.vote_count}
+        />
+      ))}
+    </FeedSection>
+
+    {/* In Theaters */}
+    <FeedSection
+      title="In Theaters"
+      section="theaters"
+      loadMoreUrl="/api/feed?section=theaters&page=2"
+    >
+      {theatersItems.map((item, i) => (
+        <TitleCard
+          tmdbId={item.id}
+          title={getDisplayTitle(item)}
+          posterPath={item.poster_path}
+          mediaType={"movie"}
+          releaseDate={getReleaseDate(item)}
+          score={theatersScores[i] ?? null}
+          voteCount={item.vote_count}
+        />
+      ))}
+    </FeedSection>
   </main>
 </Layout>
