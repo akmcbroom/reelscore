@@ -162,6 +162,22 @@ export async function fetchMDbListScores(
   try {
     const response = await fetch(url);
 
+    // Handle rate limiting — wait and retry once if we get a 429.
+    // MDbList returns Retry-After header (seconds) or X-RateLimit-Reset (timestamp).
+    if (response.status === 429) {
+      const retryAfter = response.headers.get("Retry-After");
+      const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : 2000;
+      console.warn(`MDbList rate limited for tmdbId=${tmdbId}, retrying in ${waitMs}ms`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+
+      const retryResponse = await fetch(url);
+      if (!retryResponse.ok) {
+        console.error(`MDbList retry failed: ${retryResponse.status} for tmdbId=${tmdbId}`);
+        return null;
+      }
+      return (await retryResponse.json()) as MDbListResponse;
+    }
+
     if (!response.ok) {
       console.error(
         `MDbList API error: ${response.status} ${response.statusText} for tmdbId=${tmdbId}`
@@ -288,8 +304,9 @@ export async function getScores(
  * @param kv - Cloudflare KV namespace binding
  * @param apiKey - MDbList API key
  * @param titles - Array of title info to fetch scores for
- * @param batchSize - Number of concurrent API requests per batch (default: 4)
- * @param delayMs - Delay between API batches in milliseconds (default: 250)
+ * @param batchSize - Number of concurrent API requests per batch (default: 2).
+ *   Kept low to avoid MDbList 429 rate limits — see CLAUDE.md External API Notes.
+ * @param delayMs - Delay between API batches in milliseconds (default: 500)
  * @returns Array of scores in the same order as input titles
  */
 export async function getScoresBatched(
@@ -301,8 +318,8 @@ export async function getScoresBatched(
     releaseDate: string | null;
     imdbId?: string | null;
   }>,
-  batchSize = 4,
-  delayMs = 250
+  batchSize = 2,
+  delayMs = 500
 ): Promise<(CachedScoreData | null)[]> {
   // Step 1: Read all KV caches in parallel (fast — no API calls)
   const cacheKeys = titles.map((t) => scoresCacheKey(t.tmdbId));

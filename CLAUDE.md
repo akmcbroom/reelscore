@@ -431,7 +431,7 @@ Even though everything is v1, build in this sequence so each layer has its found
   - Media type in path: `movie` or `show` (not `tv`).
   - The old query-parameter format (`?tm=123&m=movie`) is deprecated and returns the API homepage.
 - **Response:** Each title returns a `ratings` array. Each rating has `source`, `value` (raw scale), `score` (pre-normalized 0–100), and `votes`.
-- **Rate limits:** Depend on supporter tier. Check via `GET /user`. Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`. Exceeding returns 429. Batched fetching (4 concurrent, 250ms delay) works reliably.
+- **Rate limits:** Depend on supporter tier. Check via `GET /user`. Rate limit headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`. Exceeding returns 429. Batched fetching uses 2 concurrent requests with 500ms delay between batches, plus automatic retry-once on 429 with backoff.
 - **Risk:** Single point of failure for score data. No fallback currently. If MDbList goes down, scores can't refresh (cached scores still display). Consider diversification strategy in v2.
 
 ### TMDB API

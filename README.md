@@ -18,7 +18,7 @@ Logged-in users get personalized scores based on their genre, actor, and directo
 
 - **Unified audience score** — one number from 6 sources, no critic noise
 - **Personalized scores** — genre, actor, and director preferences adjust your ReelScore up to +/-9 points
-- **Discovery feeds** — trending, new releases, in theaters, and a personalized "Scored for You" section
+- **Discovery feeds** — unified popular feed blending movies and TV, with a personalized "Scored for You" section (coming soon)
 - **Watchlist** — save titles, get notified when scores shift or titles hit your streaming platforms
 - **Search & filters** — filter by media type, genre, streaming platform, and sort by score, date, or popularity
 - **No page reloads** — title details open in modals, feeds load via infinite scroll
@@ -170,12 +170,11 @@ reelscore/
 
 ### Score Colors
 
-| Range    | Meaning          |
-| -------- | ---------------- |
-| 0–59     | Red (skip it)    |
-| 60–69    | Yellow (maybe)   |
-| 70–84    | Green (watch it) |
-| 85–100   | Gold star (great)|
+| Range    | Color      | Meaning          |
+| -------- | ---------- | ---------------- |
+| 0–59     | Red        | Skip it          |
+| 60–69    | Gold/Amber | Maybe            |
+| 70–100   | Green      | Watch it         |
 
 ---
 
