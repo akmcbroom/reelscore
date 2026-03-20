@@ -227,56 +227,61 @@ export const GET: APIRoute = async ({ params, request }) => {
   // --- Render HTML ---
 
   const html = `
-    <div class="modal-content" data-tmdb-id="${tmdbId}" data-media-type="${mediaType}">
-      <!-- Backdrop header -->
-      <div class="relative h-48 sm:h-56 md:h-64 overflow-hidden rounded-t-lg">
-        ${backdropUrl
-          ? `<img src="${backdropUrl}" alt="" class="h-full w-full object-cover" />`
-          : `<div class="h-full w-full bg-surface-700"></div>`
-        }
-        <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
-
-        <!-- Close button -->
-        <button
-          @click="$store.titleModal.close()"
-          class="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
-          aria-label="Close"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-          </svg>
-        </button>
-
-        <!-- Title info overlay on backdrop -->
-        <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6 flex items-end gap-4">
-          ${posterUrl
-            ? `<img src="${posterUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="hidden sm:block w-24 rounded-lg shadow-lg flex-shrink-0" />`
-            : ""
+    <div class="modal-content flex flex-col flex-1 min-h-0" data-tmdb-id="${tmdbId}" data-media-type="${mediaType}">
+      <!-- Sticky header — backdrop + title info, stays fixed while body scrolls -->
+      <div class="relative flex-shrink-0">
+        <!-- Backdrop image -->
+        <div class="relative h-48 sm:h-56 md:h-64 overflow-hidden rounded-t-lg">
+          ${backdropUrl
+            ? `<img src="${backdropUrl}" alt="" class="h-full w-full object-cover" />`
+            : `<div class="h-full w-full bg-surface-700"></div>`
           }
-          <div class="flex-1 min-w-0">
-            <h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>
-            <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-white/60">
-              <span class="badge badge-secondary text-[10px] px-1.5 py-0">${typeBadge}</span>
-              ${year ? `<span>${year}</span>` : ""}
-              ${contentRating ? `<span class="border border-white/20 rounded px-1.5 py-0 text-xs">${contentRating}</span>` : ""}
-              ${runtimeDisplay ? `<span>${runtimeDisplay}</span>` : ""}
+          <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
+
+          <!-- Close button -->
+          <button
+            @click="$store.titleModal.close()"
+            class="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
+            aria-label="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+            </svg>
+          </button>
+
+          <!-- Title info overlay on backdrop -->
+          <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6 flex items-end gap-4">
+            ${posterUrl
+              ? `<img src="${posterUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="hidden sm:block w-24 rounded-lg shadow-lg flex-shrink-0" />`
+              : ""
+            }
+            <div class="flex-1 min-w-0">
+              <h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>
+              <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-white/60">
+                <span class="badge badge-secondary text-[10px] px-1.5 py-0">${typeBadge}</span>
+                ${year ? `<span>${year}</span>` : ""}
+                ${contentRating ? `<span class="border border-white/20 rounded px-1.5 py-0 text-xs">${contentRating}</span>` : ""}
+                ${runtimeDisplay ? `<span>${runtimeDisplay}</span>` : ""}
+              </div>
+              <!-- Genres — displayed under title metadata -->
+              ${title.genres.length > 0 ? `
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  ${title.genres.map((g) => `<span class="badge badge-secondary text-[10px]">${g.name}</span>`).join("")}
+                </div>
+              ` : ""}
             </div>
-          </div>
-          <div class="flex-shrink-0">
-            ${renderScoreBadge(score, isUnreleased, sources)}
+            <div class="flex-shrink-0">
+              ${renderScoreBadge(score, isUnreleased, sources)}
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Body content -->
-      <div class="p-4 sm:p-6 space-y-6">
-
-        <!-- Genres -->
-        ${title.genres.length > 0 ? `
-          <div class="flex flex-wrap gap-2">
-            ${title.genres.map((g) => `<span class="badge badge-secondary text-xs">${g.name}</span>`).join("")}
-          </div>
-        ` : ""}
+      <!-- Scrollable body content -->
+      <div class="flex-1 overflow-y-auto overscroll-contain min-h-0">
+        <!-- Sticky top fade — stays at top of scroll area so content softly disappears under the header -->
+        <div class="sticky top-0 left-0 right-0 h-8 bg-gradient-to-b from-surface-800 to-transparent z-10 pointer-events-none -mb-8"></div>
+        <div class="px-4 sm:p-6 space-y-6">
 
         <!-- Overview -->
         ${title.overview ? `
@@ -332,6 +337,7 @@ export const GET: APIRoute = async ({ params, request }) => {
             </div>
           </div>
         ` : ""}
+        </div>
       </div>
     </div>`;
 
