@@ -281,15 +281,15 @@ export async function getScores(
 // --- Batched Score Fetching ---
 
 /**
- * Fetches scores for multiple titles in rate-limited batches.
- * MDbList has strict rate limits, so we process titles in small
- * groups with a delay between each group to avoid 429 errors.
+ * Fetches scores for multiple titles, using KV cache first.
+ * Reads all caches in parallel (fast), then only fetches uncached
+ * titles from MDbList in rate-limited batches (slow but necessary).
  *
  * @param kv - Cloudflare KV namespace binding
  * @param apiKey - MDbList API key
  * @param titles - Array of title info to fetch scores for
- * @param batchSize - Number of concurrent requests per batch (default: 4)
- * @param delayMs - Delay between batches in milliseconds (default: 250)
+ * @param batchSize - Number of concurrent API requests per batch (default: 4)
+ * @param delayMs - Delay between API batches in milliseconds (default: 250)
  * @returns Array of scores in the same order as input titles
  */
 export async function getScoresBatched(
@@ -304,22 +304,36 @@ export async function getScoresBatched(
   batchSize = 4,
   delayMs = 250
 ): Promise<(CachedScoreData | null)[]> {
-  const results: (CachedScoreData | null)[] = new Array(titles.length).fill(null);
+  // Step 1: Read all KV caches in parallel (fast — no API calls)
+  const cacheKeys = titles.map((t) => scoresCacheKey(t.tmdbId));
+  const cached = await Promise.all(
+    cacheKeys.map((key) => kvGet<CachedScoreData>(kv, key))
+  );
 
-  for (let i = 0; i < titles.length; i += batchSize) {
-    const batch = titles.slice(i, i + batchSize);
+  const results: (CachedScoreData | null)[] = [...cached];
+
+  // Step 2: Identify uncached titles that need API fetches
+  const uncachedIndices: number[] = [];
+  for (let i = 0; i < titles.length; i++) {
+    if (!cached[i]) uncachedIndices.push(i);
+  }
+
+  // Step 3: Fetch uncached titles from MDbList in rate-limited batches
+  for (let i = 0; i < uncachedIndices.length; i += batchSize) {
+    const batchIndices = uncachedIndices.slice(i, i + batchSize);
     const batchResults = await Promise.all(
-      batch.map((t) =>
-        getScores(kv, apiKey, t.tmdbId, t.releaseDate, t.imdbId, t.mediaType)
-      )
+      batchIndices.map((idx) => {
+        const t = titles[idx]!;
+        return getScores(kv, apiKey, t.tmdbId, t.releaseDate, t.imdbId, t.mediaType);
+      })
     );
 
     for (let j = 0; j < batchResults.length; j++) {
-      results[i + j] = batchResults[j] ?? null;
+      results[batchIndices[j]!] = batchResults[j] ?? null;
     }
 
-    // Delay between batches (skip delay after last batch)
-    if (i + batchSize < titles.length) {
+    // Delay between API batches (skip delay after last batch)
+    if (i + batchSize < uncachedIndices.length) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }

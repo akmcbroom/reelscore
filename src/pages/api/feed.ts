@@ -87,9 +87,9 @@ function renderTitleCard(item: {
           </span>
         </div>
       </div>
-      <h3 class="mt-2 text-sm font-medium text-white line-clamp-2 leading-tight">${item.title.replace(/</g, "&lt;")}</h3>
+      <h3 class="mt-2 text-sm font-medium text-white truncate leading-tight">${item.title.replace(/</g, "&lt;")}</h3>
       <div class="mt-1 flex items-center gap-2 text-xs text-white/50">
-        <span class="text-[10px] px-1.5 py-0 rounded border border-white/20 text-white/50">${typeBadgeText}</span>
+        <span class="badge badge-secondary text-[10px] px-1.5 py-0">${typeBadgeText}</span>
         ${year ? `<span>${year}</span>` : ""}
       </div>
     </div>`;

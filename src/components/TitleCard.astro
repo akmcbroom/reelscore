@@ -71,13 +71,13 @@ const isUnreleased = releaseDate ? new Date(releaseDate) > new Date() : false;
   </div>
 
   {/* Title */}
-  <h3 class="mt-2 text-sm font-medium text-white line-clamp-2 leading-tight">
+  <h3 class="mt-2 text-sm font-medium text-white truncate leading-tight">
     {title}
   </h3>
 
   {/* Metadata row: type badge + year */}
   <div class="mt-1 flex items-center gap-2 text-xs text-white/50">
-    <span class="text-[10px] px-1.5 py-0 rounded border border-white/20 text-white/50">
+    <span class="badge badge-secondary text-[10px] px-1.5 py-0">
       {typeBadgeText}
     </span>
     {year && <span>{year}</span>}
