@@ -557,27 +557,38 @@ export async function getUpcoming(
 // --- Popular (Deep Pagination) ---
 
 /**
- * Fetches popular movies from TMDB.
- * Unlike trending (which has ~40 titles total), popular has 500+ pages,
- * making it ideal for infinite scroll pagination beyond page 1.
+ * Fetches popular movies from TMDB, filtered to US releases.
+ * Uses the Discover endpoint with watch_region=US and with_release_type
+ * to ensure only titles available in the US are returned.
+ * Unlike trending (which has ~40 titles total), discover has 500+ pages,
+ * making it ideal for infinite scroll pagination.
  *
  * @param apiKey - TMDB API key
  * @param page - Page number (1-based, 20 results per page)
- * @returns Paginated popular movies
+ * @returns Paginated popular movies with US releases
  */
 export async function getPopularMovies(
   apiKey: string,
   page = 1
 ): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  // Discover endpoint supports proper region filtering.
+  // watch_region=US limits to titles available in the US.
+  // sort_by=popularity.desc gives the same ordering as /movie/popular.
+  // See CLAUDE.md "U.S. releases only".
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
-    "/movie/popular",
-    { page: String(page) }
+    "/discover/movie",
+    {
+      page: String(page),
+      sort_by: "popularity.desc",
+      watch_region: "US",
+      with_original_language: "en",
+    }
   );
 
   if (!response) return null;
 
-  // popular endpoint returns movies without media_type — add it
+  // Discover endpoint returns movies without media_type — add it
   response.results = response.results.map((r) => ({
     ...r,
     media_type: "movie" as const,
@@ -587,26 +598,34 @@ export async function getPopularMovies(
 }
 
 /**
- * Fetches popular TV shows from TMDB.
- * Like popular movies, this has 500+ pages — ideal for deep pagination.
+ * Fetches popular TV shows from TMDB, filtered to US releases.
+ * Uses the Discover endpoint with watch_region=US for proper region filtering.
+ * Has 500+ pages — ideal for deep pagination.
  *
  * @param apiKey - TMDB API key
  * @param page - Page number (1-based, 20 results per page)
- * @returns Paginated popular TV shows
+ * @returns Paginated popular TV shows with US releases
  */
 export async function getPopularTV(
   apiKey: string,
   page = 1
 ): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  // Discover endpoint with English language + US watch region.
+  // See CLAUDE.md "U.S. releases only".
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
-    "/tv/popular",
-    { page: String(page) }
+    "/discover/tv",
+    {
+      page: String(page),
+      sort_by: "popularity.desc",
+      watch_region: "US",
+      with_original_language: "en",
+    }
   );
 
   if (!response) return null;
 
-  // popular endpoint returns TV shows without media_type — add it
+  // Discover endpoint returns TV shows without media_type — add it
   response.results = response.results.map((r) => ({
     ...r,
     media_type: "tv" as const,
