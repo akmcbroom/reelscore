@@ -554,6 +554,67 @@ export async function getUpcoming(
   return response;
 }
 
+// --- Popular (Deep Pagination) ---
+
+/**
+ * Fetches popular movies from TMDB.
+ * Unlike trending (which has ~40 titles total), popular has 500+ pages,
+ * making it ideal for infinite scroll pagination beyond page 1.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number (1-based, 20 results per page)
+ * @returns Paginated popular movies
+ */
+export async function getPopularMovies(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/movie/popular",
+    { page: String(page) }
+  );
+
+  if (!response) return null;
+
+  // popular endpoint returns movies without media_type — add it
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "movie" as const,
+  }));
+
+  return response;
+}
+
+/**
+ * Fetches popular TV shows from TMDB.
+ * Like popular movies, this has 500+ pages — ideal for deep pagination.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number (1-based, 20 results per page)
+ * @returns Paginated popular TV shows
+ */
+export async function getPopularTV(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/tv/popular",
+    { page: String(page) }
+  );
+
+  if (!response) return null;
+
+  // popular endpoint returns TV shows without media_type — add it
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "tv" as const,
+  }));
+
+  return response;
+}
+
 // --- Genre List ---
 
 /**

@@ -32,7 +32,10 @@ const { title, section, loadMoreUrl } = Astro.props;
     <slot />
   </div>
 
-  {/* Load more trigger — HTMX infinite scroll */}
+  {/* Initial load-more trigger — fires once when scrolled into view.
+      HTMX "revealed" trigger fetches the next page and appends cards into the grid.
+      Subsequent pages chain their own sentinel divs inside the grid response,
+      so this initial trigger only fires for page 2. */}
   {loadMoreUrl && (
     <div
       class="mt-6 flex justify-center"

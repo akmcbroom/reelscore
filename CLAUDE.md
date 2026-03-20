@@ -27,7 +27,7 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 | Framework     | Astro (SSR via `@astrojs/cloudflare` adapter)      |
 | Styling       | Tailwind CSS v4                                    |
 | UI Components | Basecoat (basecoat-css) + HTMX + Alpine.js         |
-| Icons         | Lucide (`lucide-astro`)                             |
+| Icons         | Lucide (inline SVGs from lucide.dev — NOT `lucide-astro`) |
 | Auth          | Better Auth (native D1 support, `better-auth-cloudflare`) |
 | Database      | Cloudflare D1 (SQLite) via Drizzle ORM             |
 | Caching       | Cloudflare KV (TMDB/MDbList response caching)      |
@@ -248,7 +248,7 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ### Discovery Feed (Home Page)
 
-- **Single unified feed** — blends Trending + Now Playing + On The Air + Upcoming from TMDB, deduplicates by TMDB ID, sorts by popularity descending.
+- **Single unified feed** — page 1 blends Trending + Now Playing + On The Air + Upcoming from TMDB, deduplicates by TMDB ID, sorts by popularity. Pages 2+ use TMDB's Popular endpoints (`movie/popular` + `tv/popular`) for deep pagination with a much larger content pool.
 - No separate sections or tabs — one continuous, infinitely-scrolling feed.
 - Scored for You feed (logged-in only) is a future addition (Build Order Step 11).
 - All feeds are **URL-param driven**: active filters update URL, fully shareable/bookmarkable.
@@ -267,10 +267,10 @@ All filter state syncs to URL params and applies site-wide.
 
 ### Title Card
 
-- **Score pill:** Rounded pill shape, centered, half-overlapping the top of the poster. Left side: ReelScore (color-coded). Right side: thumbs up/down buttons.
-- **Unreleased titles:** If a title's release date is in the future, show a **clock icon** (Lucide `Clock`) in the score pill instead of a score. Pill uses the neutral `bg-surface-600` color.
-- **Below poster:** Title (truncated if long).
-- **Below title:** Type badge (TV or Movie) + Release Date. Watchlist/bookmark button to the right.
+- **Score badge:** Perfectly round circle, centered, overlapping the top of the poster. Displays ReelScore (color-coded), clock icon (unreleased), or "—" (insufficient sources). Translucent `bg-black/40` background for no-score/unreleased titles. Thumbs up/down buttons are on the modal view, not the card.
+- **Unreleased titles:** If a title's release date is in the future, show a **clock icon** (Lucide `Clock` inline SVG) in the score badge instead of a score.
+- **Below poster:** Title (single line, truncated with ellipsis).
+- **Below title:** Type badge (`badge-secondary` for both Movie and TV) + year.
 - **Poster overlay, bottom-right:** "..." menu button. Opens options overlaid along the right side of the poster, expanding upward: Refresh Score (auth only), Share, Hide.
 - **Refresh Score button behavior:** On click, icon swaps to spinner while fetching. On completion, icon swaps to a **lock icon** for the duration of the 15-minute cooldown. Lock conveys "recently refreshed, try later." After cooldown expires, reverts to refresh icon. If not logged in, clicking prompts sign-up/login.
 - **Watchlist button:** Visible to all users. If not logged in, clicking prompts sign-up/login.
@@ -366,7 +366,7 @@ Notifications are detected **lazily**, not via background cron jobs:
 ## API Endpoints
 
 ### Public (no auth)
-- `GET /api/feed?type=movie|tv|all&page=X` — Unified discovery feed fragments (HTMX partial). Blends all TMDB sources, deduped, sorted by popularity.
+- `GET /api/feed?type=movie|tv|all&page=X` — Unified discovery feed (HTMX partial). Uses TMDB Popular endpoints for deep pagination. Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
 - `GET /api/search?q=X&type=X&genre=X&page=X` — Search results (HTMX partial)
 - `GET /api/title/{tmdb_id}?type=movie|tv` — Title modal content (HTMX partial)
 - `GET /api/scores/{tmdb_id}?type=movie|tv` — Score breakdown JSON

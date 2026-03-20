@@ -35,7 +35,9 @@ const [trendingData, nowPlayingData, onTheAirData, upcomingData] = await Promise
   getUpcoming(apiKey, 1),
 ]);
 
-// Blend and deduplicate by TMDB ID
+// Blend all 4 sources into one unified feed and deduplicate by TMDB ID.
+// Trending is added first so its items take priority (they appear across
+// multiple TMDB lists). The Set ensures each title appears only once.
 const seen = new Set<number>();
 const combined: TmdbTrendingItem[] = [];
 
@@ -51,7 +53,7 @@ for (const result of [
   }
 }
 
-// Sort by popularity descending
+// Sort by TMDB popularity descending — this gives a natural "what's hot" ordering
 combined.sort((a, b) => b.popularity - a.popularity);
 
 // Fetch scores in rate-limited batches

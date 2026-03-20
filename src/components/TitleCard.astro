@@ -35,7 +35,8 @@ const posterUrl = getImageUrl(posterPath, "poster", "medium");
 const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
 const typeBadgeText = mediaType === "tv" ? "TV" : "Movie";
 
-// Determine if the title is unreleased (release date is in the future)
+// Unreleased titles show a clock icon instead of a score — release date
+// is compared at render time. See CLAUDE.md Title Card and ScoreBadge.
 const isUnreleased = releaseDate ? new Date(releaseDate) > new Date() : false;
 ---
 

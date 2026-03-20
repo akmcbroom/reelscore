@@ -5,8 +5,10 @@
  *   type: "movie" | "tv" | "all" (default: "all")
  *   page: page number (default: 1)
  *
- * Blends Trending + Now Playing + On The Air + Upcoming from TMDB,
- * deduplicates by TMDB ID, and sorts by popularity.
+ * Page 1 is rendered server-side by index.astro (blends 4 TMDB sources).
+ * Pages 2+ use TMDB Popular endpoints (movies + TV), which have 500+ pages
+ * of results — much deeper than trending's ~40 titles. Both popular endpoints
+ * are fetched in parallel, blended, deduplicated, and sorted by popularity.
  *
  * Returns HTML fragments (TitleCard markup) for HTMX to swap into the page.
  * See CLAUDE.md Discovery Feeds.
@@ -15,7 +17,8 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
-  getTrending,
+  getPopularMovies,
+  getPopularTV,
   getDisplayTitle,
   getReleaseDate,
   getImageUrl,
@@ -104,14 +107,38 @@ export const GET: APIRoute = async ({ request }) => {
   const mdblistKey = env.MDBLIST_API_KEY;
   const kv = env.SCORE_CACHE;
 
-  // Page 1 is served by index.astro (full blend). For pagination (page 2+),
-  // use only trending to keep responses fast — single TMDB call instead of 4.
-  const trendingData = await getTrending(apiKey, page);
-  let items: TmdbTrendingItem[] = trendingData?.results ?? [];
+  // Use TMDB Popular endpoints for pagination — they have 500+ pages of results,
+  // unlike trending which tops out at ~40 titles. When type is "all", we fetch
+  // both movies and TV in parallel, blend them, and sort by popularity.
+  let items: TmdbTrendingItem[] = [];
+
   if (type === "movie") {
-    items = items.filter((i) => (i.media_type ?? "movie") === "movie");
+    const data = await getPopularMovies(apiKey, page);
+    items = data?.results ?? [];
   } else if (type === "tv") {
-    items = items.filter((i) => i.media_type === "tv");
+    const data = await getPopularTV(apiKey, page);
+    items = data?.results ?? [];
+  } else {
+    // "all" — fetch both popular movies and TV in parallel, then blend
+    const [moviesData, tvData] = await Promise.all([
+      getPopularMovies(apiKey, page),
+      getPopularTV(apiKey, page),
+    ]);
+
+    // Combine and deduplicate by TMDB ID (unlikely but defensive)
+    const seen = new Set<number>();
+    for (const result of [
+      ...(moviesData?.results ?? []),
+      ...(tvData?.results ?? []),
+    ]) {
+      if (!seen.has(result.id)) {
+        seen.add(result.id);
+        items.push(result);
+      }
+    }
+
+    // Sort blended results by popularity descending so the feed feels cohesive
+    items.sort((a, b) => b.popularity - a.popularity);
   }
 
   // Fetch scores in rate-limited batches
@@ -142,10 +169,33 @@ export const GET: APIRoute = async ({ request }) => {
     };
   });
 
-  // Render HTML fragments
-  const html = scoredItems.map(renderTitleCard).join("\n");
+  // Render HTML fragments — title cards plus a "load more" sentinel for the next page.
+  // Each HTMX response must include the next page's scroll sentinel to keep
+  // infinite scroll chaining. The sentinel targets the grid with beforeend,
+  // so the next batch of cards (including the next sentinel) appends to the grid.
+  // When no items are returned, we omit the sentinel to stop scrolling.
+  const cardsHtml = scoredItems.map(renderTitleCard).join("\n");
 
-  return new Response(html, {
+  const nextPage = page + 1;
+  const typeParam = type !== "all" ? `&type=${type}` : "";
+  const loadMoreSentinel = items.length > 0
+    ? `<div
+        hx-get="/api/feed?page=${nextPage}${typeParam}"
+        hx-trigger="revealed"
+        hx-target="#grid-feed"
+        hx-swap="beforeend"
+        class="col-span-full flex justify-center py-4"
+      >
+        <span class="badge-outline text-white/40">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          </svg>
+          Loading more...
+        </span>
+      </div>`
+    : "";
+
+  return new Response(cardsHtml + loadMoreSentinel, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
     },
