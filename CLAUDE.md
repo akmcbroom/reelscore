@@ -332,6 +332,26 @@ Notifications are detected **lazily**, not via background cron jobs:
 
 ---
 
+## Monetization
+
+### Ad System
+
+- **Placement:** Every 9th item in the discovery feed grid, occupying a regular grid cell.
+- **Appearance:** Native-style — same card dimensions as title cards, blends into grid layout. Should feel like a natural part of the feed, not a disruptive banner.
+- **Labeling:** Clear "Sponsored" badge (small, subtle but visible) on ad cards for FTC compliance and user transparency.
+- **Provider:** Undecided — implementation should be provider-agnostic. Ad slots render a container div that any provider's SDK can fill (Google AdSense, Carbon Ads, etc.).
+- **Feed integration:** Ad slots are inserted server-side during HTML rendering in the feed API (`/api/feed`), not via client-side injection. This keeps the grid layout consistent and avoids layout shifts.
+- **Loading:** Ads lazy-load like title cards — no upfront heavy SDK download.
+
+### Premium Tier (Future)
+
+- Ad-free experience for premium/paid users.
+- Free and anonymous users see ads in the feed.
+- Premium check happens server-side when rendering feed — ad slots simply aren't inserted for premium users.
+- Pricing, payment provider, and additional premium features TBD.
+
+---
+
 ## Data Model (Drizzle Schema Outline)
 
 ### Users (managed by Better Auth + extended)
@@ -406,6 +426,7 @@ Even though everything is v1, build in this sequence so each layer has its found
 13. **In-app notifications** — Score change detection, streaming availability changes, notification badge.
 14. **Profile page** — Manage preferences, hidden titles, streaming platforms, notification settings.
 15. **Polish** — Score transparency hover (dev mode), share functionality, edge cases, performance.
+16. **Monetization** — Native ad slots in feed grid (every 9th item), provider-agnostic container, premium ad-free tier.
 
 ---
 

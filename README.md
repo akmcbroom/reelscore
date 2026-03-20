@@ -178,6 +178,12 @@ reelscore/
 
 ---
 
+## Monetization
+
+ReelScore uses native-style ads that blend into the discovery feed grid, appearing every 9th item. Ad cards match the title card dimensions and include a subtle "Sponsored" label for transparency. The ad system is provider-agnostic. A future premium tier will offer an ad-free experience.
+
+---
+
 ## Contributing
 
 This is a solo project. If you're reading this and want to contribute, open an issue first to discuss.
