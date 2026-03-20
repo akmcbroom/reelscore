@@ -92,7 +92,7 @@ function renderTitleCard(item: {
       </div>`;
 
   return `
-    <div class="group relative flex flex-col" data-tmdb-id="${item.tmdbId}" data-media-type="${item.mediaType}">
+    <div class="group relative flex flex-col cursor-pointer" data-tmdb-id="${item.tmdbId}" data-media-type="${item.mediaType}" @click="$store.titleModal.openTitle(${item.tmdbId}, '${item.mediaType}')">
       <div class="relative overflow-hidden rounded-lg bg-surface-700 aspect-[2/3]">
         ${posterHtml}
         <div class="absolute -top-0 left-1/2 -translate-x-1/2 translate-y-2 z-10">

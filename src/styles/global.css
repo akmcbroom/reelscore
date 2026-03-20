@@ -15,3 +15,12 @@
   --color-surface-700: #1e1e1e;
   --color-surface-600: #2a2a2a;
 }
+
+/* Hide scrollbar on horizontal carousels (cast list, etc.) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

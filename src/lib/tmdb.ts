@@ -86,6 +86,8 @@ export interface TmdbTvDetails {
   backdrop_path: string | null;
   genres: TmdbGenre[];
   original_language: string;
+  /** TMDB returns seasons array on /tv/{id} — used for seasons list in Title Modal */
+  seasons?: TmdbSeason[];
   /** TV shows don't have imdb_id in base details — use external_ids if needed */
 }
 
@@ -343,6 +345,8 @@ export async function getTitleDetails(
     genres: tv.genres,
     imdbId: null, // TV shows don't include imdb_id in base details
     numberOfSeasons: tv.number_of_seasons,
+    // TMDB returns seasons array on /tv/{id} — used for Title Modal seasons list
+    seasons: tv.seasons,
   };
 }
 
@@ -760,6 +764,173 @@ export async function getCachedWatchProviders(
   await kvPut(kv, cacheKey, providers, 3 * 24 * 60 * 60);
 
   return providers;
+}
+
+// --- Videos (Trailers) ---
+
+/** A video (trailer, teaser, clip, etc.) from TMDB */
+export interface TmdbVideo {
+  id: string;
+  /** YouTube video ID — used to build embed URL */
+  key: string;
+  name: string;
+  /** Video hosting site — we only use "YouTube" */
+  site: string;
+  /** Video type: "Trailer", "Teaser", "Clip", "Featurette", etc. */
+  type: string;
+  official: boolean;
+}
+
+/**
+ * Fetches videos (trailers, teasers, etc.) for a title from TMDB.
+ *
+ * @param apiKey - TMDB API key
+ * @param tmdbId - TMDB title ID
+ * @param mediaType - "movie" or "tv"
+ * @returns Array of videos or null
+ */
+export async function getVideos(
+  apiKey: string,
+  tmdbId: number,
+  mediaType: "movie" | "tv"
+): Promise<TmdbVideo[] | null> {
+  const path = mediaType === "movie"
+    ? `/movie/${tmdbId}/videos`
+    : `/tv/${tmdbId}/videos`;
+
+  const response = await tmdbFetch<{ results: TmdbVideo[] }>(apiKey, path);
+  return response?.results ?? null;
+}
+
+/**
+ * Gets the best trailer for a title — prefers official YouTube trailers,
+ * falls back to teasers, then any YouTube video.
+ *
+ * @param videos - Array of videos from TMDB
+ * @returns Best trailer video or null if none found
+ */
+export function getBestTrailer(videos: TmdbVideo[]): TmdbVideo | null {
+  const youtubeVideos = videos.filter((v) => v.site === "YouTube");
+
+  // Prefer official trailers
+  const officialTrailer = youtubeVideos.find(
+    (v) => v.type === "Trailer" && v.official
+  );
+  if (officialTrailer) return officialTrailer;
+
+  // Fall back to any trailer
+  const anyTrailer = youtubeVideos.find((v) => v.type === "Trailer");
+  if (anyTrailer) return anyTrailer;
+
+  // Fall back to teaser
+  const teaser = youtubeVideos.find((v) => v.type === "Teaser");
+  if (teaser) return teaser;
+
+  // Fall back to any YouTube video
+  return youtubeVideos[0] ?? null;
+}
+
+/**
+ * Gets videos with KV caching. Trailers rarely change — 7-day TTL.
+ *
+ * @param kv - Cloudflare KV namespace binding
+ * @param apiKey - TMDB API key
+ * @param tmdbId - TMDB title ID
+ * @param mediaType - "movie" or "tv"
+ * @returns Cached or freshly-fetched videos
+ */
+export async function getCachedVideos(
+  kv: KVNamespace,
+  apiKey: string,
+  tmdbId: number,
+  mediaType: "movie" | "tv"
+): Promise<TmdbVideo[] | null> {
+  const cacheKey = `tmdb:videos:${tmdbId}`;
+
+  const cached = await kvGet<TmdbVideo[]>(kv, cacheKey);
+  if (cached) return cached;
+
+  const videos = await getVideos(apiKey, tmdbId, mediaType);
+  if (!videos) return null;
+
+  // Trailers rarely change — cache for 7 days
+  await kvPut(kv, cacheKey, videos, 7 * 24 * 60 * 60);
+
+  return videos;
+}
+
+// --- Content Ratings (MPAA / TV Ratings) ---
+
+/**
+ * Fetches the US content rating (e.g., "PG-13", "R", "TV-MA") for a title.
+ * Movies and TV use different TMDB endpoints:
+ *   - Movies: /movie/{id}/release_dates → US certification
+ *   - TV: /tv/{id}/content_ratings → US rating
+ *
+ * @param apiKey - TMDB API key
+ * @param tmdbId - TMDB title ID
+ * @param mediaType - "movie" or "tv"
+ * @returns US content rating string (e.g., "PG-13") or null if unavailable
+ */
+export async function getContentRating(
+  apiKey: string,
+  tmdbId: number,
+  mediaType: "movie" | "tv"
+): Promise<string | null> {
+  if (mediaType === "movie") {
+    // Movies: extract US certification from release_dates endpoint
+    const response = await tmdbFetch<{
+      results: Array<{
+        iso_3166_1: string;
+        release_dates: Array<{ certification: string }>;
+      }>;
+    }>(apiKey, `/movie/${tmdbId}/release_dates`);
+
+    const usRelease = response?.results?.find((r) => r.iso_3166_1 === "US");
+    // Find the first non-empty certification in the US release dates
+    const certification = usRelease?.release_dates?.find(
+      (rd) => rd.certification && rd.certification.length > 0
+    )?.certification;
+
+    return certification ?? null;
+  }
+
+  // TV: extract US rating from content_ratings endpoint
+  const response = await tmdbFetch<{
+    results: Array<{ iso_3166_1: string; rating: string }>;
+  }>(apiKey, `/tv/${tmdbId}/content_ratings`);
+
+  const usRating = response?.results?.find((r) => r.iso_3166_1 === "US");
+  return usRating?.rating ?? null;
+}
+
+/**
+ * Gets content rating with KV caching. Ratings never change — 7-day TTL.
+ *
+ * @param kv - Cloudflare KV namespace binding
+ * @param apiKey - TMDB API key
+ * @param tmdbId - TMDB title ID
+ * @param mediaType - "movie" or "tv"
+ * @returns Cached or freshly-fetched content rating
+ */
+export async function getCachedContentRating(
+  kv: KVNamespace,
+  apiKey: string,
+  tmdbId: number,
+  mediaType: "movie" | "tv"
+): Promise<string | null> {
+  const cacheKey = `tmdb:rating:${tmdbId}`;
+
+  const cached = await kvGet<string>(kv, cacheKey);
+  if (cached) return cached;
+
+  const rating = await getContentRating(apiKey, tmdbId, mediaType);
+  if (!rating) return null;
+
+  // Content ratings never change — cache for 7 days
+  await kvPut(kv, cacheKey, rating, 7 * 24 * 60 * 60);
+
+  return rating;
 }
 
 // --- Utility: Get Display Title ---

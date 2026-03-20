@@ -14,14 +14,199 @@ const { title = "ReelScore" } = Astro.props;
     <meta name="description" content="Watch what you like, not what the critics like." />
     <title>{title} | ReelScore</title>
   </head>
-  <body class="min-h-screen bg-surface-900 text-white antialiased">
+  <body class="min-h-screen bg-surface-900 text-white antialiased" x-data>
     <slot />
 
+    <!-- Title Modal — Basecoat Dialog + Alpine.js state -->
+    <!-- Opens inline when a title card is clicked. Content loaded via HTMX. -->
+    <!-- URL-param driven: ?title=12345&type=movie — see CLAUDE.md Title Modal -->
+    <div
+      x-data
+      x-show="$store.titleModal.open"
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0"
+      x-transition:enter-end="opacity-100"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+      @keydown.escape.window="$store.titleModal.close()"
+      class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-6 md:p-10"
+      style="display: none;"
+    >
+      <!-- Backdrop overlay -->
+      <div
+        class="fixed inset-0 bg-black/70"
+        @click="$store.titleModal.close()"
+      ></div>
+
+      <!-- Modal panel -->
+      <div
+        class="relative w-full max-w-2xl rounded-lg bg-surface-800 shadow-2xl"
+        x-show="$store.titleModal.open"
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+        x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+        x-transition:leave-end="opacity-0 scale-95 translate-y-4"
+        @click.stop
+      >
+        <!-- HTMX loads title content here -->
+        <div id="title-modal-content">
+          <!-- Loading skeleton -->
+          <div class="p-8 flex items-center justify-center">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trailer Modal — YouTube embed overlay -->
+    <div
+      x-data
+      x-show="$store.titleModal.showTrailer"
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0"
+      x-transition:enter-end="opacity-100"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+      @keydown.escape.window="$store.titleModal.showTrailer = false"
+      class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style="display: none;"
+    >
+      <div class="fixed inset-0 bg-black/90" @click="$store.titleModal.showTrailer = false"></div>
+      <div class="relative w-full max-w-4xl aspect-video" @click.stop>
+        <button
+          @click="$store.titleModal.showTrailer = false"
+          class="absolute -top-10 right-0 text-white/70 hover:text-white"
+          aria-label="Close trailer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+        <template x-if="$store.titleModal.showTrailer && $store.titleModal.trailerKey">
+          <iframe
+            :src="`https://www.youtube.com/embed/${$store.titleModal.trailerKey}?autoplay=1&rel=0`"
+            class="w-full h-full rounded-lg"
+            frameborder="0"
+            allow="autoplay; encrypted-media"
+            allowfullscreen
+          ></iframe>
+        </template>
+      </div>
+    </div>
+
     <script>
-      import "htmx.org";
+      import htmx from "htmx.org";
       import Alpine from "alpinejs";
       import "basecoat-css/all";
+
+      // Expose htmx globally so Alpine store and HTMX-loaded content can access it
+      (window as any).htmx = htmx;
+
+      /**
+       * Alpine store for title modal state.
+       * Manages open/close, HTMX content loading, trailer overlay,
+       * and URL param sync (?title=X&type=Y).
+       */
+      Alpine.store("titleModal", {
+        open: false,
+        tmdbId: null as number | null,
+        mediaType: "movie" as "movie" | "tv",
+        trailerKey: "" as string,
+        showTrailer: false,
+
+        /**
+         * Opens the modal for a given title. Updates URL params and
+         * triggers HTMX to fetch the modal content.
+         */
+        openTitle(tmdbId: number, mediaType: string) {
+          this.tmdbId = tmdbId;
+          this.mediaType = mediaType as "movie" | "tv";
+          this.open = true;
+          this.showTrailer = false;
+          this.trailerKey = "";
+
+          // Update URL for shareability/bookmarking — see CLAUDE.md Title Modal
+          const url = new URL(window.location.href);
+          url.searchParams.set("title", String(tmdbId));
+          url.searchParams.set("type", mediaType);
+          history.pushState(null, "", url.toString());
+
+          // Reset modal content to loading state
+          const container = document.getElementById("title-modal-content");
+          if (container) {
+            container.innerHTML = `<div class="p-8 flex items-center justify-center"><div class="spinner"></div></div>`;
+          }
+
+          // Use HTMX to fetch the title content
+          const htmx = (window as any).htmx;
+          if (htmx && container) {
+            htmx.ajax("GET", `/api/title/${tmdbId}?type=${mediaType}`, {
+              target: "#title-modal-content",
+              swap: "innerHTML",
+            });
+          }
+
+          // Prevent body scroll while modal is open
+          document.body.style.overflow = "hidden";
+        },
+
+        /**
+         * Closes the modal and cleans up URL params.
+         */
+        close() {
+          this.open = false;
+          this.showTrailer = false;
+          this.trailerKey = "";
+
+          // Remove title/type params from URL
+          const url = new URL(window.location.href);
+          url.searchParams.delete("title");
+          url.searchParams.delete("type");
+          history.pushState(null, "", url.toString());
+
+          // Restore body scroll
+          document.body.style.overflow = "";
+        },
+      });
+
       Alpine.start();
+
+      // Re-initialize Alpine on HTMX-loaded content so @click directives work
+      // on dynamically loaded title cards and modal content.
+      document.body.addEventListener("htmx:afterSwap", (event: any) => {
+        Alpine.initTree(event.detail.target);
+      });
+
+      // Check URL params on page load — open modal if ?title=X is present.
+      // This makes the modal URL-shareable and bookmarkable.
+      document.addEventListener("DOMContentLoaded", () => {
+        const params = new URLSearchParams(window.location.search);
+        const titleId = params.get("title");
+        const type = params.get("type") ?? "movie";
+        if (titleId) {
+          const store = Alpine.store("titleModal") as any;
+          store.openTitle(parseInt(titleId, 10), type);
+        }
+      });
+
+      // Handle browser back/forward — close or open modal based on URL params
+      window.addEventListener("popstate", () => {
+        const params = new URLSearchParams(window.location.search);
+        const titleId = params.get("title");
+        const store = Alpine.store("titleModal") as any;
+        if (titleId) {
+          const type = params.get("type") ?? "movie";
+          store.openTitle(parseInt(titleId, 10), type);
+        } else if (store.open) {
+          store.open = false;
+          store.showTrailer = false;
+          document.body.style.overflow = "";
+        }
+      });
     </script>
   </body>
 </html>
