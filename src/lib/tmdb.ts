@@ -175,6 +175,25 @@ export interface TmdbSeason {
   overview: string;
 }
 
+/** A single episode from TMDB's /tv/{id}/season/{N} endpoint */
+export interface TmdbEpisode {
+  id: number;
+  name: string;
+  overview: string;
+  episode_number: number;
+  season_number: number;
+  /** Landscape screenshot image path */
+  still_path: string | null;
+  air_date: string | null;
+  runtime: number | null;
+  vote_average: number;
+}
+
+/** Full season detail including episodes array — from /tv/{id}/season/{N} */
+export interface TmdbSeasonDetail extends TmdbSeason {
+  episodes: TmdbEpisode[];
+}
+
 // --- Unified Title Type ---
 
 /**
@@ -764,6 +783,58 @@ export async function getCachedWatchProviders(
   await kvPut(kv, cacheKey, providers, 3 * 24 * 60 * 60);
 
   return providers;
+}
+
+// --- Season Details (Episodes) ---
+
+/**
+ * Fetches full season details including all episodes from TMDB.
+ * Uses the /tv/{id}/season/{season_number} endpoint.
+ *
+ * @param apiKey - TMDB API key
+ * @param tvId - TMDB TV show ID
+ * @param seasonNumber - Season number to fetch
+ * @returns Season detail with episodes array, or null
+ */
+export async function getSeasonDetails(
+  apiKey: string,
+  tvId: number,
+  seasonNumber: number
+): Promise<TmdbSeasonDetail | null> {
+  return tmdbFetch<TmdbSeasonDetail>(
+    apiKey,
+    `/tv/${tvId}/season/${seasonNumber}`
+  );
+}
+
+/**
+ * Gets season details with KV caching. Episode data rarely changes
+ * for aired seasons — 7-day TTL.
+ *
+ * @param kv - Cloudflare KV namespace binding
+ * @param apiKey - TMDB API key
+ * @param tvId - TMDB TV show ID
+ * @param seasonNumber - Season number to fetch
+ * @returns Cached or freshly-fetched season detail
+ */
+export async function getCachedSeasonDetails(
+  kv: KVNamespace,
+  apiKey: string,
+  tvId: number,
+  seasonNumber: number
+): Promise<TmdbSeasonDetail | null> {
+  const cacheKey = `tmdb:season:${tvId}:${seasonNumber}`;
+
+  const cached = await kvGet<TmdbSeasonDetail>(kv, cacheKey);
+  if (cached) return cached;
+
+  const season = await getSeasonDetails(apiKey, tvId, seasonNumber);
+  if (!season) return null;
+
+  // Episode data rarely changes for aired seasons — cache for 7 days
+  await kvPut(kv, cacheKey, season, 7 * 24 * 60 * 60);
+
+  return season;
 }
 
 // --- Videos (Trailers) ---

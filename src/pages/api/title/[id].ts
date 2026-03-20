@@ -138,20 +138,60 @@ function renderProvider(provider: TmdbWatchProvider): string {
 }
 
 /**
- * Renders a season row for TV shows.
+ * Renders the full seasons section for TV shows as a horizontal season
+ * pill selector with a lazy-loaded episode carousel below.
+ *
+ * Season pills scroll horizontally; clicking one loads that season's
+ * episodes via HTMX into the carousel area below. Previously loaded
+ * seasons are cached in Alpine state to avoid re-fetching.
+ *
+ * @param seasons - Array of season metadata from TMDB
+ * @param tmdbId - TV show TMDB ID (needed for episode fetch URL)
  */
-function renderSeason(season: TmdbSeason): string {
-  // Skip "Specials" (season 0) to keep the list clean
-  if (season.season_number === 0) return "";
+function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number): string {
+  // Filter out "Specials" (season 0)
+  const filteredSeasons = seasons.filter((s) => s.season_number !== 0);
+  if (filteredSeasons.length === 0) return "";
 
-  const year = season.air_date ? new Date(season.air_date).getFullYear() : "";
-  return `
-    <div class="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-      <div>
-        <span class="text-sm font-medium text-white">${season.name.replace(/</g, "&lt;")}</span>
-        ${year ? `<span class="ml-2 text-xs text-white/40">${year}</span>` : ""}
+  const firstSeason = filteredSeasons[0].season_number;
+
+  // Skeleton placeholders matching episode card layout — shown while HTMX fetches
+  const skeletonCards = Array.from({ length: 4 }, () => `
+    <div class="flex-shrink-0 w-40">
+      <div class="skeleton aspect-video rounded-md"></div>
+      <div class="skeleton h-3 w-16 mt-1.5 rounded"></div>
+      <div class="skeleton h-3.5 w-32 mt-1 rounded"></div>
+    </div>`).join("");
+
+  // Season pill buttons — horizontal scroll
+  const seasonPills = filteredSeasons.map((s) => `
+    <button
+      class="flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors"
+      :class="selectedSeason === ${s.season_number} ? 'bg-white text-black' : 'bg-surface-600 text-white/60 hover:bg-surface-500 hover:text-white/80'"
+      @click="if (selectedSeason !== ${s.season_number}) { selectedSeason = ${s.season_number}; if (!loadedSeasons.includes(${s.season_number})) { loadedSeasons.push(${s.season_number}); htmx.ajax('GET', '/api/season/${tmdbId}?season=${s.season_number}', { target: '#season-episodes-${tmdbId}-${s.season_number}', swap: 'innerHTML' }); } }"
+    >${s.season_number}</button>`).join("");
+
+  // Episode containers — one per season, only the selected one is visible
+  const episodeContainers = filteredSeasons.map((s) => `
+    <div x-show="selectedSeason === ${s.season_number}" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+      <div id="season-episodes-${tmdbId}-${s.season_number}">
+        <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          ${skeletonCards}
+        </div>
       </div>
-      <span class="text-xs text-white/50">${season.episode_count} episodes</span>
+    </div>`).join("");
+
+  return `
+    <div x-data="{ selectedSeason: ${firstSeason}, loadedSeasons: [${firstSeason}] }" x-init="htmx.ajax('GET', '/api/season/${tmdbId}?season=${firstSeason}', { target: '#season-episodes-${tmdbId}-${firstSeason}', swap: 'innerHTML' })">
+      <h3 class="text-sm font-semibold text-white/80 mb-2">Seasons</h3>
+      <!-- Season pill slider -->
+      <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        ${seasonPills}
+      </div>
+      <!-- Episode carousel area -->
+      <div class="mt-2">
+        ${episodeContainers}
+      </div>
     </div>`;
 }
 
@@ -305,15 +345,10 @@ export const GET: APIRoute = async ({ params, request }) => {
           </div>
         ` : ""}
 
-        <!-- Seasons (TV only) -->
-        ${mediaType === "tv" && title.seasons && title.seasons.length > 0 ? `
-          <div>
-            <h3 class="text-sm font-semibold text-white/80 mb-2">Seasons</h3>
-            <div class="rounded-lg bg-surface-700/50 px-3">
-              ${title.seasons.map(renderSeason).join("")}
-            </div>
-          </div>
-        ` : ""}
+        <!-- Seasons (TV only) — horizontal season pills + episode carousel -->
+        ${mediaType === "tv" && title.seasons && title.seasons.length > 0
+          ? renderSeasonsSection(title.seasons, tmdbId)
+          : ""}
 
         <!-- Trailer button -->
         ${trailer ? `
