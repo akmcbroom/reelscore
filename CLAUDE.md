@@ -166,9 +166,8 @@ All 6 audience scores sourced via **MDbList API** (paid plan):
 | Range    | Color                   |
 | -------- | ----------------------- |
 | 0–59     | Red                     |
-| 60–69    | Yellow                  |
-| 70–84    | Green                   |
-| 85–100   | Green with star/sparkle |
+| 60–69    | Gold/Amber              |
+| 70–100   | Green                   |
 
 ### Score Caching (KV)
 
@@ -248,7 +247,7 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ### Discovery Feed (Home Page)
 
-- **Single unified feed** — page 1 blends Trending + Now Playing + On The Air + Upcoming from TMDB, deduplicates by TMDB ID, sorts by popularity. Pages 2+ use TMDB's Popular endpoints (`movie/popular` + `tv/popular`) for deep pagination with a much larger content pool.
+- **Single unified feed** — uses TMDB Popular endpoints (`movie/popular` + `tv/popular`) for all pages. Both types are fetched in parallel, blended, deduplicated by TMDB ID, and sorted by popularity. This provides consistent content from top to bottom with 500+ pages of depth for infinite scroll.
 - No separate sections or tabs — one continuous, infinitely-scrolling feed.
 - Scored for You feed (logged-in only) is a future addition (Build Order Step 11).
 - All feeds are **URL-param driven**: active filters update URL, fully shareable/bookmarkable.
@@ -414,7 +413,7 @@ Even though everything is v1, build in this sequence so each layer has its found
 
 - Sleek, modern, confident. Think premium streaming app, not generic dashboard.
 - Dark mode primary (media content looks best on dark backgrounds).
-- Score colors are the primary accent palette (red/yellow/green/gold).
+- Score colors are the primary accent palette (red/gold/green).
 - Poster-forward design — large images, minimal chrome around them.
 - The ReelScore pill is the signature UI element. It should feel distinctive and instantly recognizable.
 - Mobile-first responsive design.

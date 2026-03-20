@@ -224,9 +224,9 @@ describe("calculateReelScore", () => {
 
   it("assigns correct color based on score range", () => {
     expect(calculateReelScore([makeScore("a", 50), makeScore("b", 50)]).color).toBe("red");
-    expect(calculateReelScore([makeScore("a", 65), makeScore("b", 65)]).color).toBe("yellow");
+    expect(calculateReelScore([makeScore("a", 65), makeScore("b", 65)]).color).toBe("gold");
     expect(calculateReelScore([makeScore("a", 75), makeScore("b", 75)]).color).toBe("green");
-    expect(calculateReelScore([makeScore("a", 90), makeScore("b", 90)]).color).toBe("gold");
+    expect(calculateReelScore([makeScore("a", 90), makeScore("b", 90)]).color).toBe("green");
   });
 
   it("includes source details in result", () => {
@@ -255,22 +255,19 @@ describe("getScoreColor", () => {
     expect(getScoreColor(59)).toBe("red");
   });
 
-  it("returns yellow for 60-69", () => {
-    expect(getScoreColor(60)).toBe("yellow");
-    expect(getScoreColor(65)).toBe("yellow");
-    expect(getScoreColor(69)).toBe("yellow");
+  it("returns gold for 60-69", () => {
+    expect(getScoreColor(60)).toBe("gold");
+    expect(getScoreColor(65)).toBe("gold");
+    expect(getScoreColor(69)).toBe("gold");
   });
 
-  it("returns green for 70-84", () => {
+  it("returns green for 70-100", () => {
     expect(getScoreColor(70)).toBe("green");
     expect(getScoreColor(77)).toBe("green");
     expect(getScoreColor(84)).toBe("green");
-  });
-
-  it("returns gold for 85-100", () => {
-    expect(getScoreColor(85)).toBe("gold");
-    expect(getScoreColor(92)).toBe("gold");
-    expect(getScoreColor(100)).toBe("gold");
+    expect(getScoreColor(85)).toBe("green");
+    expect(getScoreColor(92)).toBe("green");
+    expect(getScoreColor(100)).toBe("green");
   });
 });
 

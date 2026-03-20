@@ -24,11 +24,10 @@ interface Props {
 
 const { score, size = "md", isUnreleased = false, sources = [] } = Astro.props;
 
-/** Map score to Tailwind color classes */
+/** Map score to Tailwind color classes — see CLAUDE.md Score Display Colors */
 function getColorClasses(score: number): string {
-  if (score >= 85) return "bg-score-gold text-black";
   if (score >= 70) return "bg-score-green text-black";
-  if (score >= 60) return "bg-score-yellow text-black";
+  if (score >= 60) return "bg-score-gold text-black";
   return "bg-score-red text-white";
 }
 

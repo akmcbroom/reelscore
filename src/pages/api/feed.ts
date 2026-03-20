@@ -25,7 +25,8 @@ import {
   type TmdbTrendingItem,
 } from "../../lib/tmdb.ts";
 import { getScoresBatched } from "../../lib/mdblist.ts";
-import { calculateReelScore } from "../../lib/scoring.ts";
+import { calculateReelScore, getSourceLabel } from "../../lib/scoring.ts";
+import type { AudienceSource } from "../../lib/mdblist.ts";
 
 /**
  * Renders a single TitleCard as an HTML string.
@@ -54,19 +55,30 @@ function renderTitleCard(item: {
   let scoreTitle: string;
 
   if (item.isUnreleased) {
-    // Lucide Clock icon SVG (18x18 to fit the pill)
+    // Lucide Clock icon SVG (16x16 to fit the pill)
     scoreDisplay = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
     scoreTitle = "Not yet released";
   } else if (item.score !== null) {
     scoreDisplay = String(item.score);
-    if (item.score >= 85) scoreColorClass = "bg-score-gold text-black";
-    else if (item.score >= 70) scoreColorClass = "bg-score-green text-black";
-    else if (item.score >= 60) scoreColorClass = "bg-score-yellow text-black";
+    // Color tiers: green (70+), gold/amber (60-69), red (0-59)
+    if (item.score >= 70) scoreColorClass = "bg-score-green text-black";
+    else if (item.score >= 60) scoreColorClass = "bg-score-gold text-black";
     else scoreColorClass = "bg-score-red text-white";
     scoreTitle = `ReelScore: ${item.score}`;
   } else {
     scoreDisplay = "—";
     scoreTitle = "Not enough ratings";
+  }
+
+  // Dev-only tooltip with source breakdown — mirrors ScoreBadge.astro behavior.
+  // import.meta.env.DEV is available in Astro API routes at build/dev time.
+  if (import.meta.env.DEV && item.sources.length > 0) {
+    const breakdown = item.sources
+      .map((s) => `${getSourceLabel(s.source as AudienceSource)}: ${s.normalizedScore}`)
+      .join(" | ");
+    scoreTitle = item.score !== null
+      ? `ReelScore: ${item.score} (${item.sources.length} sources)\n${breakdown}`
+      : `Insufficient sources (${item.sources.length}/2)\n${breakdown}`;
   }
 
   // Lucide Video icon SVG for poster placeholder
@@ -178,21 +190,19 @@ export const GET: APIRoute = async ({ request }) => {
 
   const nextPage = page + 1;
   const typeParam = type !== "all" ? `&type=${type}` : "";
+  // Invisible sentinel — triggers next page fetch when scrolled into view.
+  // No visible spinner so cards flow seamlessly between pages.
+  // Sentinel uses "display:contents" so it doesn't create a grid item or row.
+  // This keeps it in the DOM for HTMX's "revealed" trigger while being
+  // invisible to CSS grid layout — no gaps between pages.
   const loadMoreSentinel = items.length > 0
     ? `<div
+        style="display:contents"
         hx-get="/api/feed?page=${nextPage}${typeParam}"
         hx-trigger="revealed"
         hx-target="#grid-feed"
         hx-swap="beforeend"
-        class="col-span-full flex justify-center py-4"
-      >
-        <span class="badge-outline text-white/40">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
-          Loading more...
-        </span>
-      </div>`
+      ></div>`
     : "";
 
   return new Response(cardsHtml + loadMoreSentinel, {

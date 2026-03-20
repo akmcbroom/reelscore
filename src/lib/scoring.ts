@@ -20,15 +20,14 @@ export const MIN_SOURCES = 2;
 /** Score range boundaries for color coding — see CLAUDE.md Score Display Colors */
 export const SCORE_RANGES = {
   RED: { min: 0, max: 59 },
-  YELLOW: { min: 60, max: 69 },
-  GREEN: { min: 70, max: 84 },
-  GOLD: { min: 85, max: 100 },
+  GOLD: { min: 60, max: 69 },
+  GREEN: { min: 70, max: 100 },
 } as const;
 
 // --- Types ---
 
 /** Color classification for a ReelScore value */
-export type ScoreColor = "red" | "yellow" | "green" | "gold";
+export type ScoreColor = "red" | "gold" | "green";
 
 /** Result of a ReelScore calculation */
 export interface ReelScoreResult {
@@ -116,9 +115,8 @@ export function calculateReelScoreFromCache(
  * @returns Color classification
  */
 export function getScoreColor(score: number): ScoreColor {
-  if (score >= SCORE_RANGES.GOLD.min) return "gold";
   if (score >= SCORE_RANGES.GREEN.min) return "green";
-  if (score >= SCORE_RANGES.YELLOW.min) return "yellow";
+  if (score >= SCORE_RANGES.GOLD.min) return "gold";
   return "red";
 }
 

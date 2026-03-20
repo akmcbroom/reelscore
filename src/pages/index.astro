@@ -1,9 +1,10 @@
 ---
 /**
  * Home page — Unified discovery feed.
- * Blends Trending + Now Playing + On The Air + Upcoming from TMDB,
- * deduplicates by TMDB ID, and sorts by popularity.
- * Renders initial data server-side, then uses HTMX for pagination.
+ * Uses TMDB Popular endpoints (movies + TV) for a consistent feed
+ * from top to bottom. Both types are fetched in parallel, blended,
+ * deduplicated, and sorted by popularity. Pagination (page 2+) uses
+ * the same Popular endpoints via the /api/feed HTMX endpoint.
  * See CLAUDE.md Discovery Feeds.
  */
 
@@ -11,10 +12,8 @@ import Layout from "../layouts/Layout.astro";
 import TitleCard from "../components/TitleCard.astro";
 import FeedSection from "../components/FeedSection.astro";
 import {
-  getTrending,
-  getNowPlaying,
-  getOnTheAir,
-  getUpcoming,
+  getPopularMovies,
+  getPopularTV,
   getDisplayTitle,
   getReleaseDate,
   type TmdbTrendingItem,
@@ -27,25 +26,21 @@ const apiKey = env.TMDB_API_KEY;
 const mdblistKey = env.MDBLIST_API_KEY;
 const kv = env.SCORE_CACHE;
 
-// Fetch page 1 from all TMDB sources in parallel
-const [trendingData, nowPlayingData, onTheAirData, upcomingData] = await Promise.all([
-  getTrending(apiKey, 1),
-  getNowPlaying(apiKey, 1),
-  getOnTheAir(apiKey, 1),
-  getUpcoming(apiKey, 1),
+// Fetch page 1 of popular movies and TV in parallel — same source as
+// feed.ts pagination, so the content flows seamlessly across pages.
+const [moviesData, tvData] = await Promise.all([
+  getPopularMovies(apiKey, 1),
+  getPopularTV(apiKey, 1),
 ]);
 
-// Blend all 4 sources into one unified feed and deduplicate by TMDB ID.
-// Trending is added first so its items take priority (they appear across
-// multiple TMDB lists). The Set ensures each title appears only once.
+// Blend movies and TV, deduplicate by TMDB ID, sort by popularity.
+// This interleaves both types naturally instead of chunking by type.
 const seen = new Set<number>();
 const combined: TmdbTrendingItem[] = [];
 
 for (const result of [
-  ...(trendingData?.results ?? []),
-  ...(nowPlayingData?.results ?? []),
-  ...(onTheAirData?.results ?? []),
-  ...(upcomingData?.results ?? []),
+  ...(moviesData?.results ?? []),
+  ...(tvData?.results ?? []),
 ]) {
   if (!seen.has(result.id)) {
     seen.add(result.id);
@@ -53,7 +48,7 @@ for (const result of [
   }
 }
 
-// Sort by TMDB popularity descending — this gives a natural "what's hot" ordering
+// Sort by TMDB popularity descending — interleaves movies and TV naturally
 combined.sort((a, b) => b.popularity - a.popularity);
 
 // Fetch scores in rate-limited batches
