@@ -13,6 +13,8 @@ const { title = "ReelScore" } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Watch what you like, not what the critics like." />
     <title>{title} | ReelScore</title>
+    {/* Tailwind v4 CDN — dev only, enables live class testing in browser devtools */}
+    {import.meta.env.DEV && <script is:inline src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>}
   </head>
   <body class="min-h-screen bg-surface-900 text-white antialiased" x-data>
     <slot />
