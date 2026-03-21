@@ -5,10 +5,12 @@
  *   type: "movie" | "tv" | "all" (default: "all")
  *   page: page number (default: 1)
  *
- * Page 1 is rendered server-side by index.astro (blends 4 TMDB sources).
- * Pages 2+ use TMDB Popular endpoints (movies + TV), which have 500+ pages
- * of results — much deeper than trending's ~40 titles. Both popular endpoints
- * are fetched in parallel, blended, deduplicated, and sorted by popularity.
+ * Page 1 is rendered server-side by index.astro.
+ * Pages 2+ use TMDB Popular endpoints (movies + TV). Each feed page
+ * serves exactly 60 items — the LCM of all grid column counts (2,3,4,5,6) —
+ * so every row is always full at every responsive breakpoint.
+ * For "all" type: 2 TMDB pages per type (80 blended → top 60).
+ * For single type: 3 TMDB pages (60 items). All fetches run in parallel.
  *
  * Returns HTML fragments (TitleCard markup) for HTMX to swap into the page.
  * See CLAUDE.md Discovery Feeds.
@@ -119,29 +121,55 @@ export const GET: APIRoute = async ({ request }) => {
   const mdblistKey = env.MDBLIST_API_KEY;
   const kv = env.SCORE_CACHE;
 
-  // Use TMDB Popular endpoints for pagination — they have 500+ pages of results,
-  // unlike trending which tops out at ~40 titles. When type is "all", we fetch
-  // both movies and TV in parallel, blend them, and sort by popularity.
+  // 60 items per page = LCM(2,3,4,5,6) — fills complete rows at every
+  // responsive breakpoint so there are never gaps in the grid.
+  // "all" fetches 2 TMDB pages per type (80 total, take 60).
+  // Single type fetches 3 TMDB pages (60 total).
+  // All fetches run in parallel so latency stays the same.
   let items: TmdbTrendingItem[] = [];
 
   if (type === "movie") {
-    const data = await getPopularMovies(apiKey, page);
-    items = data?.results ?? [];
+    // 3 TMDB pages × 20 = 60 items
+    const tmdbStart = (page - 1) * 3 + 1;
+    const [d1, d2, d3] = await Promise.all([
+      getPopularMovies(apiKey, tmdbStart),
+      getPopularMovies(apiKey, tmdbStart + 1),
+      getPopularMovies(apiKey, tmdbStart + 2),
+    ]);
+    items = [
+      ...(d1?.results ?? []),
+      ...(d2?.results ?? []),
+      ...(d3?.results ?? []),
+    ];
   } else if (type === "tv") {
-    const data = await getPopularTV(apiKey, page);
-    items = data?.results ?? [];
+    const tmdbStart = (page - 1) * 3 + 1;
+    const [d1, d2, d3] = await Promise.all([
+      getPopularTV(apiKey, tmdbStart),
+      getPopularTV(apiKey, tmdbStart + 1),
+      getPopularTV(apiKey, tmdbStart + 2),
+    ]);
+    items = [
+      ...(d1?.results ?? []),
+      ...(d2?.results ?? []),
+      ...(d3?.results ?? []),
+    ];
   } else {
-    // "all" — fetch both popular movies and TV in parallel, then blend
-    const [moviesData, tvData] = await Promise.all([
-      getPopularMovies(apiKey, page),
-      getPopularTV(apiKey, page),
+    // "all" — 2 TMDB pages per type (80 total), blend and take top 60
+    const tmdbStart = (page - 1) * 2 + 1;
+    const [m1, m2, t1, t2] = await Promise.all([
+      getPopularMovies(apiKey, tmdbStart),
+      getPopularMovies(apiKey, tmdbStart + 1),
+      getPopularTV(apiKey, tmdbStart),
+      getPopularTV(apiKey, tmdbStart + 1),
     ]);
 
     // Combine and deduplicate by TMDB ID (unlikely but defensive)
     const seen = new Set<number>();
     for (const result of [
-      ...(moviesData?.results ?? []),
-      ...(tvData?.results ?? []),
+      ...(m1?.results ?? []),
+      ...(m2?.results ?? []),
+      ...(t1?.results ?? []),
+      ...(t2?.results ?? []),
     ]) {
       if (!seen.has(result.id)) {
         seen.add(result.id);
@@ -152,6 +180,9 @@ export const GET: APIRoute = async ({ request }) => {
     // Sort blended results by popularity descending so the feed feels cohesive
     items.sort((a, b) => b.popularity - a.popularity);
   }
+
+  // Trim to exactly 60 for seamless grid rows at all breakpoints
+  items = items.slice(0, 60);
 
   // Fetch scores in rate-limited batches
   const scoreInputs = items.map((item) => ({
@@ -191,8 +222,8 @@ export const GET: APIRoute = async ({ request }) => {
   const nextPage = page + 1;
   const typeParam = type !== "all" ? `&type=${type}` : "";
   // Max page cap — prevents runaway DOM growth that degrades performance.
-  // 20 pages × ~26 cards = ~520 titles, more than enough for discovery.
-  const MAX_PAGES = 20;
+  // 10 pages × 60 cards = 600 titles, more than enough for discovery.
+  const MAX_PAGES = 10;
   // Scroll sentinel — triggers next page fetch via IntersectionObserver.
   // Uses "intersect threshold:0.1" instead of "revealed" because "revealed"
   // fires immediately on DOM insertion (before layout), causing runaway loading.

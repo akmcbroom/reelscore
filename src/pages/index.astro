@@ -26,11 +26,14 @@ const apiKey = env.TMDB_API_KEY;
 const mdblistKey = env.MDBLIST_API_KEY;
 const kv = env.SCORE_CACHE;
 
-// Fetch page 1 of popular movies and TV in parallel — same source as
-// feed.ts pagination, so the content flows seamlessly across pages.
-const [moviesData, tvData] = await Promise.all([
+// 60 items per page = LCM(2,3,4,5,6) — fills complete rows at every
+// responsive breakpoint so there are never gaps in the grid.
+// Fetch 2 TMDB pages per type (20 each = 80 total), blend, take top 60.
+const [moviesData1, moviesData2, tvData1, tvData2] = await Promise.all([
   getPopularMovies(apiKey, 1),
+  getPopularMovies(apiKey, 2),
   getPopularTV(apiKey, 1),
+  getPopularTV(apiKey, 2),
 ]);
 
 // Blend movies and TV, deduplicate by TMDB ID, sort by popularity.
@@ -39,8 +42,10 @@ const seen = new Set<number>();
 const combined: TmdbTrendingItem[] = [];
 
 for (const result of [
-  ...(moviesData?.results ?? []),
-  ...(tvData?.results ?? []),
+  ...(moviesData1?.results ?? []),
+  ...(moviesData2?.results ?? []),
+  ...(tvData1?.results ?? []),
+  ...(tvData2?.results ?? []),
 ]) {
   if (!seen.has(result.id)) {
     seen.add(result.id);
@@ -50,6 +55,9 @@ for (const result of [
 
 // Sort by TMDB popularity descending — interleaves movies and TV naturally
 combined.sort((a, b) => b.popularity - a.popularity);
+
+// Trim to exactly 60 for seamless grid rows at all breakpoints
+combined.length = Math.min(combined.length, 60);
 
 // Fetch scores in rate-limited batches
 const scoreInputs = combined.map((item) => ({
