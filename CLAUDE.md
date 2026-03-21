@@ -461,15 +461,17 @@ Notifications are detected **lazily**, not via background cron jobs:
 
 ## Build Order
 
-Even though everything is v1, build in this sequence so each layer has its foundation:
+Even though everything is v1, build in this sequence so each layer has its foundation.
 
-1. **Project scaffold** — Astro + Cloudflare adapter + Tailwind + Basecoat + Drizzle + D1/KV bindings. Get a blank page deployed to Workers.
-2. **Score engine** — MDbList API integration, score normalization, ReelScore calculation, KV caching, score refresh. Build `scoring.ts` and `mdblist.ts`. Get real scores displaying on a page before anything else.
-3. **TMDB integration** — Metadata fetching (title details, cast, genres, images, streaming availability), KV caching. Build `tmdb.ts`.
-4. **Discovery feeds** — Hybrid home page: curated horizontal rows (In Theaters/Airing Now, Trending, New Releases) at top, blended infinite scroll grid below. Cross-deduplication between rows and grid. Title cards. HTMX partials. URL-param filter state.
-5. **Title modal** — Detail view with score, metadata, cast, genres, trailer. URL-param driven (`?title=X`).
-6. **Sticky header** — Search, filters, sort, media type toggle. Wire to URL params and feed endpoints.
-7. **Auth** — Better Auth with email/password + Google + Apple OAuth. Login, signup, session management. Confirm auth works end-to-end before building personalization.
+**Progress:** Steps 1–3 and 5 are complete. Step 4 is partially complete (blended grid works, hybrid layout with curated rows still needed). Steps 6–16 are not started.
+
+1. ~~**Project scaffold**~~ — Astro + Cloudflare adapter + Tailwind + Basecoat + Drizzle + D1/KV bindings. Deployed to Workers. **Done.**
+2. ~~**Score engine**~~ — MDbList API integration, score normalization, ReelScore calculation, KV caching, score refresh. `scoring.ts` and `mdblist.ts` with tests. **Done.**
+3. ~~**TMDB integration**~~ — Metadata fetching (title details, cast, genres, images, streaming availability), KV caching. `tmdb.ts` with full endpoint coverage. **Done.**
+4. **Discovery feeds** — Hybrid home page: curated horizontal rows (In Theaters/Airing Now, Trending, New Releases) at top, blended infinite scroll grid below. Cross-deduplication between rows and grid. Title cards. HTMX partials. URL-param filter state. **In progress** — blended grid with 60-item pages and infinite scroll works; curated rows and cross-dedup still needed.
+5. ~~**Title modal**~~ — Detail view with score, metadata, cast, genres, trailer, seasons/episodes. URL-param driven (`?title=X`). Alpine store state. **Done.**
+6. **Sticky header + Search** — StickyHeader.astro with search input, media type toggle, genre filter, sort options, streaming platform filter. Build `search.astro` page and `/api/search` endpoint. Wire all filter state to URL params.
+7. **Auth** — Build `db.ts` (Drizzle client factory) and `auth.ts` (Better Auth instance factory). Create database schema tables (users, preferences, ratings, watchlist, hidden titles, notifications). Login/signup pages, OAuth callback, `/api/auth/*` catch-all. Confirm auth works end-to-end before building personalization.
 8. **Personalization engine** — Preference data model, confidence weights, score adjustment logic. Build `personalization.ts`.
 9. **Onboarding** — All 4 steps required (genres, actors, directors, title ratings). Title rating step uses genre-aware selection via TMDB Discover (titles matching user's chosen genres). Minimums enforced per step. `onboarding_completed` gates Scored for You access. Not re-runnable; preferences editable from Profile.
 10. **Thumbs up/down on titles** — Rating UI on cards and modal, preference profile updates.
