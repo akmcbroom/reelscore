@@ -126,7 +126,7 @@ const { title = "ReelScore" } = Astro.props;
           </svg>
         </button>
         <h3 class="text-lg font-semibold text-white mb-3">Overview</h3>
-        <p class="text-sm text-white/70 leading-relaxed" id="overview-full-text"></p>
+        <p class="text-sm text-white/70 leading-relaxed" x-text="$store.titleModal.overviewText"></p>
       </div>
     </div>
 
@@ -149,7 +149,7 @@ const { title = "ReelScore" } = Astro.props;
         <!-- Still image background with gradient -->
         <div class="relative">
           <div class="h-48 sm:h-56 overflow-hidden">
-            <img id="episode-modal-still" src="" alt="" class="h-full w-full object-cover" />
+            <img :src="$store.titleModal.episode.stillUrl" alt="" class="h-full w-full object-cover" />
             <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
           </div>
           <!-- Close button -->
@@ -164,19 +164,19 @@ const { title = "ReelScore" } = Astro.props;
           </button>
           <!-- Episode info overlay -->
           <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
-            <p class="text-xs text-white/50" id="episode-modal-show-title"></p>
-            <h2 class="text-lg sm:text-xl font-bold text-white leading-tight mt-1" id="episode-modal-title"></h2>
+            <p class="text-xs text-white/50" x-text="$store.titleModal.episode.showTitle"></p>
+            <h2 class="text-lg sm:text-xl font-bold text-white leading-tight mt-1" x-text="$store.titleModal.episode.title"></h2>
             <div class="mt-1.5 flex flex-wrap items-center">
-              <span id="episode-modal-season-ep" class="badge-secondary bg-white/10 backdrop-blur"></span>
-              <span id="episode-modal-airdate" class="badge-secondary bg-transparent"></span>
-              <span id="episode-modal-separator" class="text-white/30">&bull;</span>
-              <span id="episode-modal-runtime" class="badge-secondary bg-transparent"></span>
+              <span class="badge-secondary bg-white/10 backdrop-blur" x-text="$store.titleModal.episode.seasonEp"></span>
+              <span class="badge-secondary bg-transparent" x-text="$store.titleModal.episode.airDate"></span>
+              <span class="text-white/30" x-show="$store.titleModal.episode.runtime">&bull;</span>
+              <span class="badge-secondary bg-transparent" x-text="$store.titleModal.episode.runtime"></span>
             </div>
           </div>
         </div>
         <!-- Description -->
         <div class="px-4 pb-4 sm:px-6 sm:pb-6">
-          <p class="text-sm text-white/70 leading-relaxed" id="episode-modal-overview"></p>
+          <p class="text-sm text-white/70 leading-relaxed" x-text="$store.titleModal.episode.overview"></p>
         </div>
       </div>
     </div>
@@ -203,6 +203,20 @@ const { title = "ReelScore" } = Astro.props;
         showOverview: false,
         showEpisode: false,
 
+        /** Full overview text — displayed in the overview modal */
+        overviewText: "" as string,
+
+        /** Episode detail modal state — populated by openEpisode() */
+        episode: {
+          stillUrl: "",
+          showTitle: "",
+          title: "",
+          seasonEp: "",
+          airDate: "",
+          runtime: "",
+          overview: "",
+        },
+
         /**
          * Opens the modal for a given title. Updates URL params and
          * triggers HTMX to fetch the modal content.
@@ -215,6 +229,7 @@ const { title = "ReelScore" } = Astro.props;
           this.showOverview = false;
           this.showEpisode = false;
           this.trailerKey = "";
+          this.overviewText = "";
 
           // Update URL for shareability/bookmarking — see CLAUDE.md Title Modal
           const url = new URL(window.location.href);
@@ -250,6 +265,7 @@ const { title = "ReelScore" } = Astro.props;
           this.showOverview = false;
           this.showEpisode = false;
           this.trailerKey = "";
+          this.overviewText = "";
 
           // Remove title/type params from URL
           const url = new URL(window.location.href);
@@ -259,6 +275,22 @@ const { title = "ReelScore" } = Astro.props;
 
           // Restore body scroll
           document.body.style.overflow = "";
+        },
+
+        /**
+         * Opens the full overview modal with the given text.
+         */
+        openOverview(text: string) {
+          this.overviewText = text;
+          this.showOverview = true;
+        },
+
+        /**
+         * Opens the episode detail modal with the given episode data.
+         */
+        openEpisode(data: { stillUrl: string; showTitle: string; title: string; seasonEp: string; airDate: string; runtime: string; overview: string }) {
+          this.episode = data;
+          this.showEpisode = true;
         },
       });
 

@@ -19,8 +19,8 @@ import {
 
 /**
  * Renders a single episode card for the horizontal carousel.
- * The entire card is clickable — opens an episode detail modal.
- * A newspaper icon in the top-left indicates a description is available.
+ * The entire card is clickable — opens the episode detail modal
+ * via Alpine store's openEpisode() method.
  *
  * @param episode - Episode data from TMDB
  * @param showTitle - Parent show title for display in the episode modal
@@ -54,23 +54,22 @@ function renderEpisodeCard(episode: TmdbEpisode, showTitle: string): string {
   // Format runtime
   const runtime = episode.runtime ? `${episode.runtime}m` : "";
 
-  // Escape strings for data attributes
+  // Escape strings for HTML output
   const escapedName = episode.name.replace(/"/g, "&quot;").replace(/</g, "&lt;");
-  const escapedOverview = (episode.overview || "").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-  const escapedShowTitle = showTitle.replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-  // Click handler populates the episode modal and opens it
-  const clickHandler = `
-    document.getElementById('episode-modal-still').src = '${stillUrlLarge || stillUrl || ""}';
-    document.getElementById('episode-modal-show-title').textContent = '${showTitle.replace(/'/g, "\\'")}';
-    document.getElementById('episode-modal-title').textContent = '${episode.name.replace(/'/g, "\\'")}';
-    document.getElementById('episode-modal-season-ep').textContent = 'Season ${episode.season_number}, Episode ${episode.episode_number}';
-    document.getElementById('episode-modal-airdate').textContent = '${airDate}';
-    document.getElementById('episode-modal-runtime').textContent = '${runtime}';
-    document.getElementById('episode-modal-separator').style.display = ${runtime ? "''" : "'none'"};
-    document.getElementById('episode-modal-overview').textContent = '${(episode.overview || "No description available.").replace(/'/g, "\\'")}';
-    $store.titleModal.showEpisode = true;
-  `.replace(/\n\s+/g, " ").trim();
+  // Build episode data object for Alpine store — single method call replaces 8 getElementById calls
+  // Double quotes must become &quot; to survive inside the @click="..." HTML attribute
+  const episodeData = JSON.stringify({
+    stillUrl: stillUrlLarge || stillUrl || "",
+    showTitle,
+    title: episode.name,
+    seasonEp: `Season ${episode.season_number}, Episode ${episode.episode_number}`,
+    airDate,
+    runtime,
+    overview: episode.overview || "No description available.",
+  }).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;");
+
+  const clickHandler = `$store.titleModal.openEpisode(${episodeData})`;
 
   return `
     <div class="flex-shrink-0 w-40 cursor-pointer group/ep" @click="${clickHandler}">

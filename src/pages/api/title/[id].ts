@@ -360,7 +360,7 @@ export const GET: APIRoute = async ({ params, request }) => {
             <!-- Overview — clamped to 2 lines, click to read full -->
             ${title.overview ? `<p
               class="mt-2 text-sm text-white/70 leading-tight text-pretty line-clamp-2 cursor-pointer hover:text-white/90 transition-colors"
-              @click="document.getElementById('overview-full-text').textContent = '${title.overview.replace(/'/g, "\\'")}'; $store.titleModal.showOverview = true"
+              @click="$store.titleModal.openOverview('${title.overview.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')"
               title="Click to read full overview"
             >${title.overview.replace(/</g, "&lt;")}</p>` : ""}
             <!-- Trailer button + Streaming providers -->
