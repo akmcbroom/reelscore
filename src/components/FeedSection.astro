@@ -25,25 +25,24 @@ const { title, section, loadMoreUrl } = Astro.props;
   )}
 
   {/* Card grid — responsive: 2 cols on mobile, up to 6 on desktop.
-      Wrapped in a relative container so the absolute-positioned sentinel
-      doesn't affect grid layout. */}
-  <div class="relative">
-    <div
-      class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-      id={`grid-${section}`}
-    >
-      <slot />
-    </div>
+      The scroll sentinel lives inside the grid as the last child so
+      it participates in grid flow and IntersectionObserver can track it. */}
+  <div
+    class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+    id={`grid-${section}`}
+  >
+    <slot />
 
-    {/* Invisible sentinel — positioned absolute so it doesn't create a grid
-        row or gap. Still in the DOM flow for HTMX's "revealed" trigger to fire
-        when the user scrolls near the bottom. Cards are appended directly into
-        the grid via hx-target + hx-swap="beforeend". */}
+    {/* Scroll sentinel — triggers the next page fetch via IntersectionObserver.
+        Uses "intersect threshold:0.1" instead of "revealed" because "revealed"
+        fires immediately on DOM insertion (before layout), causing runaway loading.
+        "intersect" only fires when the element is actually scrolled into view.
+        Spans the full grid width so it has a real box for IO to observe. */}
     {loadMoreUrl && (
       <div
-        class="absolute bottom-0 h-px w-px"
+        style="grid-column: 1 / -1; height: 1px;"
         hx-get={loadMoreUrl}
-        hx-trigger="revealed"
+        hx-trigger="intersect threshold:0.1"
         hx-target={`#grid-${section}`}
         hx-swap="beforeend"
       />

@@ -190,16 +190,18 @@ export const GET: APIRoute = async ({ request }) => {
 
   const nextPage = page + 1;
   const typeParam = type !== "all" ? `&type=${type}` : "";
-  // Invisible sentinel — triggers next page fetch when scrolled into view.
-  // No visible spinner so cards flow seamlessly between pages.
-  // Sentinel uses "display:contents" so it doesn't create a grid item or row.
-  // This keeps it in the DOM for HTMX's "revealed" trigger while being
-  // invisible to CSS grid layout — no gaps between pages.
-  const loadMoreSentinel = items.length > 0
+  // Max page cap — prevents runaway DOM growth that degrades performance.
+  // 20 pages × ~26 cards = ~520 titles, more than enough for discovery.
+  const MAX_PAGES = 20;
+  // Scroll sentinel — triggers next page fetch via IntersectionObserver.
+  // Uses "intersect threshold:0.1" instead of "revealed" because "revealed"
+  // fires immediately on DOM insertion (before layout), causing runaway loading.
+  // Spans the full grid width so IO can track a real box.
+  const loadMoreSentinel = items.length > 0 && page < MAX_PAGES
     ? `<div
-        style="display:contents"
+        style="grid-column: 1 / -1; height: 1px;"
         hx-get="/api/feed?page=${nextPage}${typeParam}"
-        hx-trigger="revealed"
+        hx-trigger="intersect threshold:0.1"
         hx-target="#grid-feed"
         hx-swap="beforeend"
       ></div>`
