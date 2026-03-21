@@ -189,10 +189,11 @@ Personalization adjusts the Base ReelScore up or down based on the user's prefer
 
 ### Preference Sources
 
-1. **Onboarding** — user selects liked/disliked genres, actors, directors (binary like/dislike). Also rates 10–20 popular titles (thumbs up/down).
+1. **Onboarding (required)** — user selects liked/disliked genres, actors, directors (binary like/dislike). Also rates 20 genre-aware popular titles (thumbs up/down). All 4 steps must be completed to activate the Scored for You feed. See Onboarding section for details.
 2. **Ongoing title ratings** — thumbs up/down on any title extracts its genres, top-billed actors, and director as implicit preference signals.
+3. **Profile editing** — users can add/remove individual genre, actor, and director preferences from the Profile page at any time. Manually added preferences start at weight 1.0. This is not a guided flow — it's direct preference management.
 
-Both sources feed the same preference profile. Onboarding is skippable but recommended. Can be revisited from profile page.
+All three sources feed the same preference profile. Onboarding cannot be re-run after completion, but preferences remain editable via Profile and ongoing ratings.
 
 ### Confidence Weights
 
@@ -237,10 +238,18 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ### "Scored for You" Feed
 
-- Logged-in users only.
-- Surfaces titles with highest **positive** personalization adjustments (i.e., titles that benefit most from the user's preference profile).
-- Only shows titles with a personalized ReelScore of 70+.
-- Ordered by personalization delta descending (biggest positive swing first), then by Base ReelScore descending.
+- **Logged-in users with `onboarding_completed = true` only.** Users who haven't completed onboarding see a CTA prompt instead.
+- **Candidate sourcing via TMDB Discover API** — generates a per-user candidate pool from the preference profile using three query dimensions, all fetched in parallel:
+  1. **Genre query:** `/discover/movie` + `/discover/tv` with `with_genres` (pipe-separated, OR logic). Uses user's top 5 liked genres by confidence weight. 1 page per type = 40 candidates.
+  2. **Actor query:** `/discover/movie` + `/discover/tv` with `with_people`. Uses user's top 3 liked actors by confidence weight. 1 page per type = 40 candidates.
+  3. **Director query:** `/discover/movie` + `/discover/tv` with `with_people`. Uses user's top 3 liked directors by confidence weight. 1 page per type = 40 candidates.
+- **Merge strategy:** Union all candidates from all dimensions, deduplicate by TMDB ID, remove titles the user has already rated or hidden.
+- **Scoring:** Fetch scores for all candidates via `getScoresBatched` (inline MDbList fetch for cache misses — same rate-limited batching as the main feed). Calculate personalized ReelScore for each.
+- **Filter:** Only keep titles with personalized ReelScore ≥ 70.
+- **Sort:** By personalization delta descending (biggest positive swing first), then by Base ReelScore descending.
+- **Display:** Horizontal scrollable row at the top of the home page (above curated rows), 20 titles max. Same `flex overflow-x-auto scrollbar-hide` pattern as episode/cast carousels. Same TitleCard components with scores.
+- **Endpoint:** `GET /api/feed?section=scored-for-you` — returns HTMX partial (auth required). Can be lazy-loaded via HTMX on page load to avoid blocking SSR.
+- **Caching:** Discover results cached in KV per user with 1-hour TTL (cache key: `scored-for-you:{user_id}`). Individual title scores use existing KV cache.
 
 ---
 
@@ -248,10 +257,35 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ### Discovery Feed (Home Page)
 
-- **Single unified feed** — uses TMDB Popular endpoints (`movie/popular` + `tv/popular`) for all pages. Both types are fetched in parallel, blended, deduplicated by TMDB ID, and sorted by popularity. This provides consistent content from top to bottom.
-- No separate sections or tabs — one continuous, infinitely-scrolling feed. Capped at **10 pages** (600 titles) to prevent DOM bloat. Scroll sentinels use HTMX `intersect` trigger (IntersectionObserver-based) — NOT `revealed`, which fires on DOM insertion and causes runaway loading.
+**Hybrid layout** — curated horizontal rows at the top, blended infinite scroll grid below.
+
+#### Scored for You Row (logged-in only)
+- Appears at the very top of the page for logged-in users with `onboarding_completed = true`. See "Scored for You" Feed in Personalization System for full spec.
+- Users without completed onboarding see a CTA prompt instead.
+
+#### Curated Horizontal Rows
+- **3 rows** below Scored for You (or at the top for anonymous users):
+  1. **In Theaters & Airing Now** — `getNowPlaying()` + `getOnTheAir()` blended by popularity.
+  2. **Trending This Week** — `getTrending()`.
+  3. **New Releases** — `getUpcoming()` + recently aired TV.
+- Each row: **20 titles**, horizontally scrollable (`flex overflow-x-auto scrollbar-hide` — same pattern as episode/cast carousels).
+- Each row fetches 1 TMDB page per endpoint. All fetched in parallel with each other and with the grid.
+- All rows scored via `getScoresBatched` (combined with grid items into a single batch call).
+- Rows use TitleCard components (same as grid cards).
+- Curated rows are **SSR only** (rendered on page 1) — no HTMX pagination for rows.
+
+#### Blended Infinite Scroll Grid
+- Below the curated rows. Uses TMDB Popular endpoints (`movie/popular` + `tv/popular`), blended, deduplicated by TMDB ID, sorted by popularity.
+- **Cross-deduplicated:** All TMDB IDs from the curated rows (~60 IDs) are filtered out of the grid so no title appears twice on the page. Page 2+ grid requests accept an `exclude` param (comma-separated TMDB IDs).
 - **60 items per page** — the LCM of all grid column counts (2,3,4,5,6) so every row is always full at every responsive breakpoint. For "all" type: 2 TMDB pages per type (80 blended → top 60). For single type: 3 TMDB pages (60 items). All TMDB fetches run in parallel.
-- Scored for You feed (logged-in only) is a future addition (Build Order Step 11).
+- Capped at **10 pages** (600 titles) to prevent DOM bloat. Scroll sentinels use HTMX `intersect` trigger (IntersectionObserver-based) — NOT `revealed`, which fires on DOM insertion and causes runaway loading.
+
+#### SSR Page 1 Data Flow
+- Fetch curated rows + grid page 1 **all in parallel** (existing TMDB functions support this).
+- Score all items via a single `getScoresBatched` call (curated + grid combined).
+- Render: Scored for You row (if applicable) → curated rows → grid with sentinel.
+
+#### General
 - All feeds are **URL-param driven**: active filters update URL, fully shareable/bookmarkable.
 - Clicking a title card opens its detail modal inline (no page navigation, preserves scroll position).
 
@@ -302,14 +336,16 @@ Opened inline from any title card. Two-section layout:
 
 ### Onboarding
 
-- Shown after sign-up, skippable.
-- Steps:
-  1. Genre selection (top genres, like/dislike as many as desired).
-  2. Actor selection (popular actors, like/dislike).
-  3. Director selection (popular directors, like/dislike).
-  4. Title rating (10–20 popular movies and TV shows from top 100, thumbs up/down).
-- Can be revisited and modified from Profile page.
-- "Scored for You" feed activates once preferences exist.
+- Shown after sign-up. **All 4 steps are required** — cannot skip steps.
+- Steps must be completed in order:
+  1. **Genre selection** — top genres, like/dislike. Minimum 3 selections required.
+  2. **Actor selection** — popular actors, like/dislike. Minimum 3 selections required.
+  3. **Director selection** — popular directors, like/dislike. Minimum 3 selections required.
+  4. **Title rating** — 20 genre-aware titles (thumbs up/down, can skip individual titles). Minimum 5 ratings required. Title pool is influenced by genres selected in Step 1: uses TMDB Discover with `with_genres` + `sort_by=vote_average.desc` + `vote_count.gte=500` to present titles matching the user's genre preferences (mix of movies + TV).
+- `onboarding_completed` is set to `true` only after all 4 steps are finished.
+- **Not re-runnable** — onboarding cannot be restarted after completion.
+- **Preferences editable from Profile** — individual genres, actors, and directors can be added, removed, or changed from the Profile page at any time (not as a guided flow). Manually added preferences start at weight 1.0.
+- **"Scored for You" feed activates only when `onboarding_completed = true`.** Users who haven't completed onboarding see a CTA prompt where Scored for You would appear.
 
 ### Watchlist
 
@@ -400,7 +436,7 @@ Notifications are detected **lazily**, not via background cron jobs:
 ## API Endpoints
 
 ### Public (no auth)
-- `GET /api/feed?type=movie|tv|all&page=X` — Unified discovery feed (HTMX partial). Uses TMDB Popular endpoints for deep pagination. Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
+- `GET /api/feed?type=movie|tv|all&page=X&exclude=id1,id2,...` — Blended grid feed (HTMX partial). Uses TMDB Popular endpoints for deep pagination. Optional `exclude` param filters out TMDB IDs already shown in curated rows (cross-deduplication). Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
 - `GET /api/search?q=X&type=X&genre=X&page=X` — Search results (HTMX partial)
 - `GET /api/title/{tmdb_id}?type=movie|tv` — Title modal content (HTMX partial)
 - `GET /api/season/{tv_id}?season=N&show=ShowTitle` — Season episodes carousel (HTMX partial)
@@ -408,7 +444,7 @@ Notifications are detected **lazily**, not via background cron jobs:
 
 ### Auth Required
 - `POST /api/scores/{tmdb_id}/refresh` — Force-refresh score (bypasses cache). Throttled: 1 per title per user per 15 min via KV key. Returns 429 + `retry_after` seconds if cooldown active.
-- `GET /api/feed?section=scored-for-you` — Personalized feed (HTMX partial)
+- `GET /api/feed?section=scored-for-you` — Personalized feed (HTMX partial). Requires `onboarding_completed = true`. Uses TMDB Discover to source candidates from user's preference profile (genres, actors, directors). Inline MDbList fetch for cache misses. Discover results cached in KV per user (1-hour TTL).
 - `POST /api/watchlist` — Add to watchlist `{ tmdb_id, media_type }`
 - `DELETE /api/watchlist/{tmdb_id}` — Remove from watchlist
 - `POST /api/ratings` — Rate a title `{ tmdb_id, media_type, rating: "up"|"down" }`
@@ -430,14 +466,14 @@ Even though everything is v1, build in this sequence so each layer has its found
 1. **Project scaffold** — Astro + Cloudflare adapter + Tailwind + Basecoat + Drizzle + D1/KV bindings. Get a blank page deployed to Workers.
 2. **Score engine** — MDbList API integration, score normalization, ReelScore calculation, KV caching, score refresh. Build `scoring.ts` and `mdblist.ts`. Get real scores displaying on a page before anything else.
 3. **TMDB integration** — Metadata fetching (title details, cast, genres, images, streaming availability), KV caching. Build `tmdb.ts`.
-4. **Discovery feeds** — Home page with Trending, New Releases, In Theaters sections. Title cards. Infinite scroll. HTMX partials. URL-param filter state.
+4. **Discovery feeds** — Hybrid home page: curated horizontal rows (In Theaters/Airing Now, Trending, New Releases) at top, blended infinite scroll grid below. Cross-deduplication between rows and grid. Title cards. HTMX partials. URL-param filter state.
 5. **Title modal** — Detail view with score, metadata, cast, genres, trailer. URL-param driven (`?title=X`).
 6. **Sticky header** — Search, filters, sort, media type toggle. Wire to URL params and feed endpoints.
 7. **Auth** — Better Auth with email/password + Google + Apple OAuth. Login, signup, session management. Confirm auth works end-to-end before building personalization.
 8. **Personalization engine** — Preference data model, confidence weights, score adjustment logic. Build `personalization.ts`.
-9. **Onboarding** — Genre/actor/director selection + title rating flow. Onboarding titles pulled from TMDB top-rated (20 movies + 20 TV shows, cached in KV with 7-day TTL).
+9. **Onboarding** — All 4 steps required (genres, actors, directors, title ratings). Title rating step uses genre-aware selection via TMDB Discover (titles matching user's chosen genres). Minimums enforced per step. `onboarding_completed` gates Scored for You access. Not re-runnable; preferences editable from Profile.
 10. **Thumbs up/down on titles** — Rating UI on cards and modal, preference profile updates.
-11. **Scored for You feed** — Personalized recommendations section.
+11. **Scored for You feed** — TMDB Discover-based per-user candidate pool (genre, actor, director dimensions). Union + deduplicate + personalized score sort. Horizontal row at top of home page. Requires `onboarding_completed`. Discover results cached in KV per user (1-hour TTL).
 12. **Watchlist** — Save/remove titles, watchlist page.
 13. **In-app notifications** — Score change detection, streaming availability changes, notification badge.
 14. **Profile page** — Manage preferences, hidden titles, streaming platforms, notification settings.
@@ -473,9 +509,10 @@ Even though everything is v1, build in this sequence so each layer has its found
 
 ### TMDB API
 - Free tier with API key.
-- Used for: title metadata, images, cast/crew, genres, streaming availability (watch providers), search, and onboarding title lists (top-rated movies + TV).
+- Used for: title metadata, images, cast/crew, genres, streaming availability (watch providers), search, onboarding title lists (genre-aware via Discover), and Scored for You candidate sourcing (Discover with `with_genres` and `with_people`).
 - **NOT used for scores** — all scores come from MDbList.
 - Streaming availability data comes from TMDB's watch/providers endpoint — quality varies by region but is acceptable for U.S. content.
+- **Discover API** used for: curated feed rows (now playing, trending, upcoming), Scored for You candidate pool (genre/actor/director queries), and onboarding title rating step (genre-aware selection).
 - **Not used for:** similar/related title recommendations (deferred).
 
 ---
