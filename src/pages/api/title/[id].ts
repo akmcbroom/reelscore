@@ -26,12 +26,15 @@ import {
   getCachedVideos,
   getCachedContentRating,
   getBestTrailer,
+  getCachedLogos,
+  getBestLogo,
   getImageUrl,
   type TmdbTitle,
   type TmdbCastMember,
   type TmdbCrewMember,
   type TmdbWatchProvider,
   type TmdbVideo,
+  type TmdbLogo,
   type TmdbSeason,
 } from "../../../lib/tmdb.ts";
 import { getScores } from "../../../lib/mdblist.ts";
@@ -213,7 +216,7 @@ export const GET: APIRoute = async ({ params, request }) => {
 
   // Fetch all data in parallel — this is the key performance optimization.
   // Each call hits KV cache first, only going to the API on cache miss.
-  const [title, credits, scoreData, contentRating, videos, watchProviders] =
+  const [title, credits, scoreData, contentRating, videos, watchProviders, logos] =
     await Promise.all([
       getTitleDetails(apiKey, tmdbId, mediaType),
       getCredits(apiKey, tmdbId, mediaType),
@@ -221,6 +224,7 @@ export const GET: APIRoute = async ({ params, request }) => {
       getCachedContentRating(kv, apiKey, tmdbId, mediaType),
       getCachedVideos(kv, apiKey, tmdbId, mediaType),
       getWatchProviders(apiKey, tmdbId, mediaType),
+      getCachedLogos(kv, apiKey, tmdbId, mediaType),
     ]);
 
   if (!title) {
@@ -242,6 +246,8 @@ export const GET: APIRoute = async ({ params, request }) => {
   const directors = credits ? getDirectors(credits) : [];
   const cast = credits ? getTopCast(credits, 10) : [];
   const trailer = videos ? getBestTrailer(videos) : null;
+  const logo = logos ? getBestLogo(logos) : null;
+  const logoUrl = logo ? getImageUrl(logo.file_path, "logo", "original") : null;
   // Deduplicate streaming providers — TMDB returns variants like
   // "Paramount+", "Paramount+ Amazon Channel", "Paramount+ Apple TV Channel".
   // We strip known channel suffixes to find the base service name and keep
@@ -330,8 +336,11 @@ export const GET: APIRoute = async ({ params, request }) => {
           <!-- Title info overlay on backdrop -->
           <div class="absolute bottom-0 left-0 right-0 p-4 pb-0 sm:p-6 sm:pb-0 flex items-start gap-4">
             <div class="flex-1 min-w-0">
-              <h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>
-              <div class="mt-1.5 flex flex-wrap items-center gap-1 text-sm text-white/60">
+              ${logoUrl
+                ? `<img src="${logoUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="h-10 sm:h-14 w-auto max-w-[75%] object-contain brightness-0 invert" />`
+                : `<h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>`
+              }
+              <div class="mt-2 flex flex-wrap items-center gap-1 text-sm text-white/60">
                 <span>${mediaType === "tv" ? "TV Show" : "Movie"}</span>
                 ${year ? `<span>•</span><span>${year}</span>` : ""}
                 ${mediaType === "movie" && runtimeDisplay ? `<span>•</span><span>${runtimeDisplay}</span>` : ""}

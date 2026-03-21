@@ -840,6 +840,91 @@ export async function getCachedSeasonDetails(
 // --- Videos (Trailers) ---
 
 /** A video (trailer, teaser, clip, etc.) from TMDB */
+// --- Title Logos ---
+
+export interface TmdbLogo {
+  /** Path to logo image on TMDB CDN */
+  file_path: string;
+  /** Language code (e.g., "en") — null for language-neutral logos */
+  iso_639_1: string | null;
+  width: number;
+  height: number;
+  /** Community vote average — higher means better quality */
+  vote_average: number;
+}
+
+/**
+ * Fetches logo images for a title from TMDB's images endpoint.
+ * Filters to English logos only for consistency.
+ *
+ * @param apiKey - TMDB API key
+ * @param tmdbId - TMDB title ID
+ * @param mediaType - "movie" or "tv"
+ * @returns Array of English logos or null
+ */
+export async function getLogos(
+  apiKey: string,
+  tmdbId: number,
+  mediaType: "movie" | "tv"
+): Promise<TmdbLogo[] | null> {
+  const path = mediaType === "movie"
+    ? `/movie/${tmdbId}/images`
+    : `/tv/${tmdbId}/images`;
+
+  const response = await tmdbFetch<{ logos: TmdbLogo[] }>(apiKey, path);
+  // Filter to English logos only — avoids non-Latin scripts
+  const englishLogos = response?.logos?.filter(
+    (l) => l.iso_639_1 === "en"
+  );
+  return englishLogos && englishLogos.length > 0 ? englishLogos : null;
+}
+
+/**
+ * Picks the best logo — prefers higher vote average, then wider images
+ * (wider logos tend to be horizontal title treatments that look best).
+ *
+ * @param logos - Array of logos from TMDB
+ * @returns Best logo or null
+ */
+export function getBestLogo(logos: TmdbLogo[]): TmdbLogo | null {
+  if (logos.length === 0) return null;
+  // Sort by vote average descending, then width descending
+  return [...logos].sort((a, b) =>
+    b.vote_average - a.vote_average || b.width - a.width
+  )[0];
+}
+
+/**
+ * Gets title logos with KV caching. Logos rarely change — 7-day TTL.
+ *
+ * @param kv - Cloudflare KV namespace binding
+ * @param apiKey - TMDB API key
+ * @param tmdbId - TMDB title ID
+ * @param mediaType - "movie" or "tv"
+ * @returns Cached or freshly-fetched logos
+ */
+export async function getCachedLogos(
+  kv: KVNamespace,
+  apiKey: string,
+  tmdbId: number,
+  mediaType: "movie" | "tv"
+): Promise<TmdbLogo[] | null> {
+  const cacheKey = `tmdb:logos:${tmdbId}`;
+
+  const cached = await kvGet<TmdbLogo[]>(kv, cacheKey);
+  if (cached) return cached;
+
+  const logos = await getLogos(apiKey, tmdbId, mediaType);
+  if (!logos) return null;
+
+  // Logos rarely change — cache for 7 days
+  await kvPut(kv, cacheKey, logos, 7 * 24 * 60 * 60);
+
+  return logos;
+}
+
+// --- Videos ---
+
 export interface TmdbVideo {
   id: string;
   /** YouTube video ID — used to build embed URL */
