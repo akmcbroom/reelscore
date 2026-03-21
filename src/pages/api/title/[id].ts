@@ -242,7 +242,44 @@ export const GET: APIRoute = async ({ params, request }) => {
   const directors = credits ? getDirectors(credits) : [];
   const cast = credits ? getTopCast(credits, 10) : [];
   const trailer = videos ? getBestTrailer(videos) : null;
-  const streamingProviders = watchProviders?.flatrate ?? [];
+  // Deduplicate streaming providers — TMDB returns variants like
+  // "Paramount+", "Paramount+ Amazon Channel", "Paramount+ Apple TV Channel".
+  // We strip known channel suffixes to find the base service name and keep
+  // only the first occurrence (TMDB lists the primary/direct version first).
+  // Capped at 6 to avoid cluttering the modal header.
+  const PROVIDER_SUFFIXES = [
+    " Amazon Channel",
+    " Apple TV Channel",
+    " Roku Premium Channel",
+    " with Ads",
+    " Premium",
+    " Essential",
+    " Basic",
+  ];
+
+  function getBaseProviderName(name: string): string {
+    // Trim whitespace — TMDB sometimes has trailing spaces in provider names
+    let base = name.trim();
+    // Normalize "Plus" → "+" for consistent matching (e.g., "Paramount Plus" → "Paramount+")
+    base = base.replace(/\s*\bPlus\b/gi, "+");
+    // Strip known suffixes (channel variants, tier names)
+    for (const suffix of PROVIDER_SUFFIXES) {
+      if (base.endsWith(suffix)) {
+        base = base.slice(0, -suffix.length);
+        break;
+      }
+    }
+    return base.trim();
+  }
+
+  const rawProviders = watchProviders?.flatrate ?? [];
+  const seenProviders = new Set<string>();
+  const streamingProviders = rawProviders.filter((p) => {
+    const base = getBaseProviderName(p.provider_name);
+    if (seenProviders.has(base)) return false;
+    seenProviders.add(base);
+    return true;
+  }).slice(0, 6);
 
   const year = title.releaseDate
     ? new Date(title.releaseDate).getFullYear()
@@ -317,7 +354,7 @@ export const GET: APIRoute = async ({ params, request }) => {
               ><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></button>
             </div>` : ""}
             <!-- Trailer button + Streaming providers -->
-            ${trailer || streamingProviders.length > 0 ? `<div class="mt-2 flex flex-wrap gap-2">
+            ${trailer || streamingProviders.length > 0 ? `<div class="mt-2 flex items-center gap-2">
               ${trailer ? `<button
                 @click="$store.titleModal.trailerKey = '${trailer.key}'; $store.titleModal.showTrailer = true"
                 class="btn gap-2"
@@ -326,7 +363,8 @@ export const GET: APIRoute = async ({ params, request }) => {
                   <polygon points="6 3 20 12 6 21 6 3"/>
                 </svg>
                 Watch Trailer
-              </button>` : ""}${streamingProviders.map(renderProvider).join("")}
+              </button>` : ""}
+              ${streamingProviders.length > 0 ? `<div class="ml-auto flex items-center gap-2">${streamingProviders.map(renderProvider).join("")}</div>` : ""}
             </div>` : ""}
             </div>
             <div class="flex-shrink-0">
