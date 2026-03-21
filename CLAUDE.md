@@ -95,6 +95,7 @@ reelscore/
 │   │       ├── feed.ts         # Discovery feed HTML fragments
 │   │       ├── search.ts       # Search results fragments
 │   │       ├── title/[id].ts   # Title modal content
+│   │       ├── season/[id].ts  # Season episodes carousel (HTMX partial)
 │   │       ├── scores/[id].ts  # Score data / refresh
 │   │       ├── watchlist.ts    # Watchlist CRUD
 │   │       ├── preferences.ts  # User preference updates
@@ -277,10 +278,21 @@ All filter state syncs to URL params and applies site-wide.
 
 ### Title Modal
 
-Opened inline from any title card. Contains:
-- Full title, rating, runtime, ReelScore (with score pill), genres (with like/dislike buttons on genre badges), director (with like/dislike over image), cast (with like/dislike over images).
-- Seasons list (TV shows).
-- Trailer button (opens video modal).
+Opened inline from any title card. Two-section layout:
+
+**Backdrop header overlay** — backdrop image with gradient, contains:
+- Title, year, content rating, runtime metadata row.
+- Genre badges (frosted glass style: `badge-secondary bg-white/10 backdrop-blur`).
+- Overview clamped to 3 lines. Newspaper icon (Lucide) opens a full overview modal.
+- Trailer button (opens YouTube embed modal) + streaming provider logos (right-aligned, vertically centered with trailer button).
+- **Streaming providers:** Deduplicated by base service name (strips channel suffixes like "Amazon Channel", "Apple TV Channel", "Roku Premium Channel", tier names like "Premium"/"Essential", and normalizes "Plus" → "+"). Capped at 6 max.
+- ReelScore pill (top-right of header).
+
+**Scrollable body** — contains:
+- **Seasons** (TV shows): Horizontal season pill selector. Clicking a pill lazy-loads that season's episodes via HTMX into a horizontal carousel below. Previously loaded seasons are cached in Alpine state to avoid re-fetching.
+- **Episode detail modal:** Clicking any episode card opens a detail modal with the episode still image as background (faded with gradient), show title, season/episode number, episode title, air date, runtime, and full description.
+- Cast row with actor images and character names.
+- Director (with like/dislike over image).
 - All card actions (thumbs, watchlist, share, hide, refresh).
 - Clicking an actor or director closes modal and updates discovery feed to show their filmography.
 - Modal is URL-param driven (e.g., `?title=12345`) so it can be shared/bookmarked and opens on page load.
@@ -388,6 +400,7 @@ Notifications are detected **lazily**, not via background cron jobs:
 - `GET /api/feed?type=movie|tv|all&page=X` — Unified discovery feed (HTMX partial). Uses TMDB Popular endpoints for deep pagination. Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
 - `GET /api/search?q=X&type=X&genre=X&page=X` — Search results (HTMX partial)
 - `GET /api/title/{tmdb_id}?type=movie|tv` — Title modal content (HTMX partial)
+- `GET /api/season/{tv_id}?season=N&show=ShowTitle` — Season episodes carousel (HTMX partial)
 - `GET /api/scores/{tmdb_id}?type=movie|tv` — Score breakdown JSON
 
 ### Auth Required
