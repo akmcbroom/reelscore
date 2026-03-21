@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command' | grep -q 'git commit' && echo '{\"systemMessage\":\"[Doc Sync Reminder] Have you updated CLAUDE.md and README.md to reflect your changes? Run /sync-docs to check.\"}' || true",
+            "statusMessage": "Checking for doc sync..."
+          }
+        ]
+      }
+    ]
+  }
+}
