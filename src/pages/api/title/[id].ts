@@ -80,7 +80,7 @@ function renderScoreBadge(
       : `Insufficient sources (${sources.length}/2)\n${breakdown}`;
   }
 
-  return `<span class="inline-flex items-center justify-center rounded-full font-bold tabular-nums text-base w-11 h-11 ${colorClass}" title="${titleText}">${display}</span>`;
+  return `<span class="inline-flex items-center justify-center rounded-full font-bold tabular-nums text-xl size-20 ${colorClass}" title="${titleText}">${display}</span>`;
 }
 
 /**
@@ -322,10 +322,10 @@ export const GET: APIRoute = async ({ params, request }) => {
           }
           <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
 
-          <!-- Close button -->
+          <!-- Close button — top left -->
           <button
             @click="$store.titleModal.close()"
-            class="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
+            class="absolute top-3 left-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
             aria-label="Close"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -333,9 +333,14 @@ export const GET: APIRoute = async ({ params, request }) => {
             </svg>
           </button>
 
+          <!-- Score badge — top right -->
+          <div class="absolute top-3 right-3 z-20">
+            ${renderScoreBadge(score, isUnreleased, sources)}
+          </div>
+
           <!-- Title info overlay on backdrop -->
-          <div class="absolute bottom-0 left-0 right-0 p-4 pb-0 sm:p-6 sm:pb-0 flex items-start gap-4">
-            <div class="flex-1 min-w-0">
+          <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
+            <div class="max-w-lg">
               ${logoUrl
                 ? `<img src="${logoUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="h-10 sm:h-14 w-auto max-w-[75%] object-contain brightness-0 invert" />`
                 : `<h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>`
@@ -352,9 +357,9 @@ export const GET: APIRoute = async ({ params, request }) => {
                   ${title.genres.map((g) => `<span class="badge-secondary bg-white/10 backdrop-blur">${g.name}</span>`).join("")}
                 </div>
               ` : ""}
-            <!-- Overview — clamped to 3 lines, newspaper icon opens full text -->
+            <!-- Overview — clamped to 2 lines, newspaper icon opens full text -->
             ${title.overview ? `<div class="mt-2 flex items-end gap-1.5" data-overview="${title.overview.replace(/"/g, "&quot;").replace(/</g, "&lt;")}">
-              <p class="text-sm text-white/70 leading-tight text-pretty line-clamp-3 flex-1">${title.overview.replace(/</g, "&lt;")}</p>
+              <p class="text-sm text-white/70 leading-tight text-pretty line-clamp-2 flex-1">${title.overview.replace(/</g, "&lt;")}</p>
               <button
                 @click="document.getElementById('overview-full-text').textContent = $el.closest('[data-overview]').dataset.overview; $store.titleModal.showOverview = true"
                 class="flex-shrink-0 text-white/40 hover:text-white/70 transition-colors mb-px"
@@ -363,7 +368,7 @@ export const GET: APIRoute = async ({ params, request }) => {
               ><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></button>
             </div>` : ""}
             <!-- Trailer button + Streaming providers -->
-            ${trailer || streamingProviders.length > 0 ? `<div class="mt-2 flex flex-wrap items-center gap-2">
+            ${trailer || streamingProviders.length > 0 ? `<div class="mt-2.5 flex flex-wrap items-center gap-2">
               ${trailer ? `<button
                 @click="$store.titleModal.trailerKey = '${trailer.key}'; $store.titleModal.showTrailer = true"
                 class="btn gap-2"
@@ -375,9 +380,6 @@ export const GET: APIRoute = async ({ params, request }) => {
               </button>` : ""}
               ${streamingProviders.length > 0 ? `<div class="flex items-center gap-2">${streamingProviders.map(renderProvider).join("")}</div>` : ""}
             </div>` : ""}
-            </div>
-            <div class="flex-shrink-0">
-              ${renderScoreBadge(score, isUnreleased, sources)}
             </div>
           </div>
         </div>
