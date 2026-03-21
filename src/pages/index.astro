@@ -65,23 +65,26 @@ const [
 // appears in more than one curated section.
 const curatedIds = new Set<number>();
 
-// Helper: deduplicate against prior rows, sort by popularity, take 20
-function buildRow(items: TmdbTrendingItem[]): TmdbTrendingItem[] {
+// Helper: deduplicate against prior rows, optionally sort by popularity, take 20.
+// preserveOrder=true skips the popularity sort to keep the API's native ranking
+// (e.g., TMDB's trending algorithm captures recent engagement spikes, which
+// differs from the raw lifetime popularity number).
+function buildRow(items: TmdbTrendingItem[], preserveOrder = false): TmdbTrendingItem[] {
   const unique = items.filter((item) => !curatedIds.has(item.id));
-  unique.sort((a, b) => b.popularity - a.popularity);
+  if (!preserveOrder) unique.sort((a, b) => b.popularity - a.popularity);
   const row = unique.slice(0, 20);
   for (const item of row) curatedIds.add(item.id);
   return row;
 }
 
-// Row 1: In Theaters & Airing Now — blend movies + TV
+// Row 1: In Theaters & Airing Now — blend movies + TV, sort by popularity
 const inTheaters = buildRow([
   ...(nowPlayingData?.results ?? []),
   ...(onTheAirData?.results ?? []),
 ]);
 
-// Row 2: Trending This Week
-const trending = buildRow(trendingData?.results ?? []);
+// Row 2: Trending This Week — preserve TMDB's native trending order
+const trending = buildRow(trendingData?.results ?? [], true);
 
 // Row 3: New Releases
 const newReleases = buildRow(upcomingData?.results ?? []);
@@ -218,6 +221,7 @@ const excludeParam = Array.from(curatedIds).join(",");
         so the feed API can continue filtering them out. */}
 
     <FeedSection
+      title="Discover"
       section="feed"
       loadMoreUrl={`/api/feed?page=2&exclude=${excludeParam}`}
     >
