@@ -340,7 +340,7 @@ export const GET: APIRoute = async ({ params, request }) => {
 
           <!-- Title info overlay on backdrop -->
           <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
-            <div class="max-w-lg">
+            <div class="max-w-md">
               ${logoUrl
                 ? `<img src="${logoUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="h-10 sm:h-14 w-auto max-w-[75%] object-contain brightness-0 invert" />`
                 : `<h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>`
@@ -357,16 +357,12 @@ export const GET: APIRoute = async ({ params, request }) => {
                   ${title.genres.map((g) => `<span class="badge-secondary bg-white/10 backdrop-blur">${g.name}</span>`).join("")}
                 </div>
               ` : ""}
-            <!-- Overview — clamped to 2 lines, newspaper icon opens full text -->
-            ${title.overview ? `<div class="mt-2 flex items-end gap-1.5" data-overview="${title.overview.replace(/"/g, "&quot;").replace(/</g, "&lt;")}">
-              <p class="text-sm text-white/70 leading-tight text-pretty line-clamp-2 flex-1">${title.overview.replace(/</g, "&lt;")}</p>
-              <button
-                @click="document.getElementById('overview-full-text').textContent = $el.closest('[data-overview]').dataset.overview; $store.titleModal.showOverview = true"
-                class="flex-shrink-0 text-white/40 hover:text-white/70 transition-colors mb-px"
-                aria-label="Read full overview"
-                title="Read full overview"
-              ><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></button>
-            </div>` : ""}
+            <!-- Overview — clamped to 2 lines, click to read full -->
+            ${title.overview ? `<p
+              class="mt-2 text-sm text-white/70 leading-tight text-pretty line-clamp-2 cursor-pointer hover:text-white/90 transition-colors"
+              @click="document.getElementById('overview-full-text').textContent = '${title.overview.replace(/'/g, "\\'")}'; $store.titleModal.showOverview = true"
+              title="Click to read full overview"
+            >${title.overview.replace(/</g, "&lt;")}</p>` : ""}
             <!-- Trailer button + Streaming providers -->
             ${trailer || streamingProviders.length > 0 ? `<div class="mt-2.5 flex flex-wrap items-center gap-2">
               ${trailer ? `<button

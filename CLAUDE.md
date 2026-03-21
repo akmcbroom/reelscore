@@ -285,10 +285,10 @@ Opened inline from any title card. Two-section layout:
 - **Title logo:** TMDB logo art (English, white via `brightness-0 invert`) replaces the text title when available. Falls back to plain `<h2>` text if no logo exists. Logos cached in KV (7-day TTL).
 - Metadata row: plain text with bullet separators — "TV Show • 2003 • TV-14" or "Movie • 1999 • 2h 19m • R". Runtime only shown for movies. Content rating uses a bordered badge (`border-white/60 font-bold`).
 - Genre badges (frosted glass style: `badge-secondary bg-white/10 backdrop-blur`).
-- Overview clamped to 2 lines. Newspaper icon (Lucide) opens a full overview modal.
+- Overview clamped to 2 lines. Clicking the clamped text opens a full overview modal.
 - Trailer button (opens YouTube embed modal) + streaming provider logos (inline, left-aligned).
 - **Streaming providers:** Deduplicated by base service name (strips channel suffixes like "Amazon Channel", "Apple TV Channel", "Roku Premium Channel", tier names like "Premium"/"Essential", and normalizes "Plus" → "+"). Capped at 6 max.
-- Title info content constrained to `max-w-lg`.
+- Title info content constrained to `max-w-md`.
 
 **Scrollable body** — contains:
 - **Seasons** (TV shows): Horizontal season pill selector. Clicking a pill lazy-loads that season's episodes via HTMX into a horizontal carousel below. Previously loaded seasons are cached in Alpine state to avoid re-fetching.
