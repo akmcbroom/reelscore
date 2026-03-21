@@ -1,10 +1,11 @@
 /**
  * Season episodes API endpoint — serves HTMX HTML partial for episode carousel.
  *
- * Route: GET /api/season/:tvId?season=N
+ * Route: GET /api/season/:tvId?season=N&show=ShowTitle
  *
- * Lazy-loaded when a user expands a season accordion in the title modal.
+ * Lazy-loaded when a user selects a season pill in the title modal.
  * Returns a horizontal scroll carousel of episode cards with still images.
+ * Clicking an episode card opens a detail modal with the full description.
  * See CLAUDE.md Title Modal — Seasons list.
  */
 
@@ -18,10 +19,17 @@ import {
 
 /**
  * Renders a single episode card for the horizontal carousel.
- * Uses landscape still images (16:9 aspect ratio).
+ * The entire card is clickable — opens an episode detail modal.
+ * A newspaper icon in the top-left indicates a description is available.
+ *
+ * @param episode - Episode data from TMDB
+ * @param showTitle - Parent show title for display in the episode modal
  */
-function renderEpisodeCard(episode: TmdbEpisode): string {
+function renderEpisodeCard(episode: TmdbEpisode, showTitle: string): string {
   const stillUrl = getImageUrl(episode.still_path, "backdrop", "small");
+  // Larger still for the modal background
+  const stillUrlLarge = getImageUrl(episode.still_path, "backdrop", "large");
+  const hasOverview = episode.overview && episode.overview.trim().length > 0;
 
   const stillHtml = stillUrl
     ? `<img src="${stillUrl}" alt="${episode.name.replace(/"/g, "&quot;")}" class="h-full w-full object-cover" loading="lazy" />`
@@ -32,13 +40,48 @@ function renderEpisodeCard(episode: TmdbEpisode): string {
         </svg>
       </div>`;
 
+  // Newspaper icon — visual indicator that a description is available
+  const iconHtml = hasOverview ? `
+    <div class="absolute top-1.5 left-1.5 z-10 rounded bg-black/60 p-1 text-white/70">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>
+    </div>` : "";
+
+  // Format air date as readable string
+  const airDate = episode.air_date
+    ? new Date(episode.air_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "";
+
+  // Format runtime
+  const runtime = episode.runtime ? `${episode.runtime}m` : "";
+
+  // Escape strings for data attributes
+  const escapedName = episode.name.replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const escapedOverview = (episode.overview || "").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const escapedShowTitle = showTitle.replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+  // Click handler populates the episode modal and opens it
+  const clickHandler = `
+    document.getElementById('episode-modal-still').src = '${stillUrlLarge || stillUrl || ""}';
+    document.getElementById('episode-modal-show-title').textContent = '${showTitle.replace(/'/g, "\\'")}';
+    document.getElementById('episode-modal-title').textContent = '${episode.name.replace(/'/g, "\\'")}';
+    document.getElementById('episode-modal-season-ep').textContent = 'Season ${episode.season_number}, Episode ${episode.episode_number}';
+    document.getElementById('episode-modal-airdate').textContent = '${airDate}';
+    document.getElementById('episode-modal-runtime').textContent = '${runtime}';
+    document.getElementById('episode-modal-separator').style.display = ${runtime ? "''" : "'none'"};
+    document.getElementById('episode-modal-overview').textContent = '${(episode.overview || "No description available.").replace(/'/g, "\\'")}';
+    $store.titleModal.showEpisode = true;
+  `.replace(/\n\s+/g, " ").trim();
+
   return `
-    <div class="flex-shrink-0 w-40">
-      <div class="aspect-video rounded-md overflow-hidden bg-surface-700">
-        ${stillHtml}
+    <div class="flex-shrink-0 w-40 cursor-pointer group/ep" @click="${clickHandler}">
+      <div class="relative">
+        <div class="aspect-video rounded-md overflow-hidden bg-surface-700 transition-transform duration-200 group-hover/ep:scale-105">
+          ${stillHtml}
+        </div>
+        ${iconHtml}
       </div>
       <p class="mt-1.5 text-[11px] text-white/50">Episode ${episode.episode_number}</p>
-      <p class="text-xs font-medium text-white truncate">${episode.name.replace(/</g, "&lt;")}</p>
+      <p class="text-xs font-medium text-white truncate">${escapedName}</p>
     </div>`;
 }
 
@@ -54,6 +97,9 @@ export const GET: APIRoute = async ({ params, request }) => {
     return new Response("Missing season number", { status: 400 });
   }
 
+  // Show title passed from the title modal for display in episode detail modal
+  const showTitle = url.searchParams.get("show") ?? "";
+
   const apiKey = env.TMDB_API_KEY;
   const kv = env.SCORE_CACHE;
 
@@ -68,7 +114,7 @@ export const GET: APIRoute = async ({ params, request }) => {
 
   const html = `
     <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-      ${season.episodes.map(renderEpisodeCard).join("")}
+      ${season.episodes.map((ep) => renderEpisodeCard(ep, showTitle)).join("")}
     </div>`;
 
   return new Response(html, {

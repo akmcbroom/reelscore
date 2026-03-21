@@ -148,12 +148,13 @@ function renderProvider(provider: TmdbWatchProvider): string {
  * @param seasons - Array of season metadata from TMDB
  * @param tmdbId - TV show TMDB ID (needed for episode fetch URL)
  */
-function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number): string {
+function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number, showTitle: string): string {
   // Filter out "Specials" (season 0)
   const filteredSeasons = seasons.filter((s) => s.season_number !== 0);
   if (filteredSeasons.length === 0) return "";
 
   const firstSeason = filteredSeasons[0].season_number;
+  const encodedShowTitle = encodeURIComponent(showTitle);
 
   // Skeleton placeholders matching episode card layout — shown while HTMX fetches
   const skeletonCards = Array.from({ length: 4 }, () => `
@@ -168,7 +169,7 @@ function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number): string {
     <button
       class="flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors"
       :class="selectedSeason === ${s.season_number} ? 'bg-white text-black' : 'bg-surface-600 text-white/60 hover:bg-surface-500 hover:text-white/80'"
-      @click="if (selectedSeason !== ${s.season_number}) { selectedSeason = ${s.season_number}; if (!loadedSeasons.includes(${s.season_number})) { loadedSeasons.push(${s.season_number}); htmx.ajax('GET', '/api/season/${tmdbId}?season=${s.season_number}', { target: '#season-episodes-${tmdbId}-${s.season_number}', swap: 'innerHTML' }); } }"
+      @click="if (selectedSeason !== ${s.season_number}) { selectedSeason = ${s.season_number}; if (!loadedSeasons.includes(${s.season_number})) { loadedSeasons.push(${s.season_number}); htmx.ajax('GET', '/api/season/${tmdbId}?season=${s.season_number}&show=${encodedShowTitle}', { target: '#season-episodes-${tmdbId}-${s.season_number}', swap: 'innerHTML' }); } }"
     >${s.season_number}</button>`).join("");
 
   // Episode containers — one per season, only the selected one is visible
@@ -182,7 +183,7 @@ function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number): string {
     </div>`).join("");
 
   return `
-    <div x-data="{ selectedSeason: ${firstSeason}, loadedSeasons: [${firstSeason}] }" x-init="htmx.ajax('GET', '/api/season/${tmdbId}?season=${firstSeason}', { target: '#season-episodes-${tmdbId}-${firstSeason}', swap: 'innerHTML' })">
+    <div x-data="{ selectedSeason: ${firstSeason}, loadedSeasons: [${firstSeason}] }" x-init="htmx.ajax('GET', '/api/season/${tmdbId}?season=${firstSeason}&show=${encodedShowTitle}', { target: '#season-episodes-${tmdbId}-${firstSeason}', swap: 'innerHTML' })">
       <h3 class="text-sm font-semibold text-white/80 mb-2">Seasons</h3>
       <!-- Season pill slider -->
       <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -290,15 +291,11 @@ export const GET: APIRoute = async ({ params, request }) => {
           </button>
 
           <!-- Title info overlay on backdrop -->
-          <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6 flex items-end gap-4">
-            ${posterUrl
-              ? `<img src="${posterUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="hidden sm:block w-24 rounded-lg shadow-lg flex-shrink-0" />`
-              : ""
-            }
+          <div class="absolute bottom-0 left-0 right-0 p-4 pb-0 sm:p-6 sm:pb-0 flex items-start gap-4">
             <div class="flex-1 min-w-0">
               <h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>
               <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-white/60">
-                <span class="badge badge-secondary text-[10px] px-1.5 py-0">${typeBadge}</span>
+                <span class="badge-secondary text-[10px] px-1.5 py-0">${typeBadge}</span>
                 ${year ? `<span>${year}</span>` : ""}
                 ${contentRating ? `<span class="border border-white/20 rounded px-1.5 py-0 text-xs">${contentRating}</span>` : ""}
                 ${runtimeDisplay ? `<span>${runtimeDisplay}</span>` : ""}
@@ -306,9 +303,31 @@ export const GET: APIRoute = async ({ params, request }) => {
               <!-- Genres — displayed under title metadata -->
               ${title.genres.length > 0 ? `
                 <div class="mt-2 flex flex-wrap gap-1.5">
-                  ${title.genres.map((g) => `<span class="badge badge-secondary text-[10px]">${g.name}</span>`).join("")}
+                  ${title.genres.map((g) => `<span class="badge-secondary bg-white/10 backdrop-blur">${g.name}</span>`).join("")}
                 </div>
               ` : ""}
+            <!-- Overview — clamped to 3 lines, newspaper icon opens full text -->
+            ${title.overview ? `<div class="mt-2 flex items-end gap-1.5" data-overview="${title.overview.replace(/"/g, "&quot;").replace(/</g, "&lt;")}">
+              <p class="text-sm text-white/70 leading-tight text-pretty line-clamp-3 flex-1">${title.overview.replace(/</g, "&lt;")}</p>
+              <button
+                @click="document.getElementById('overview-full-text').textContent = $el.closest('[data-overview]').dataset.overview; $store.titleModal.showOverview = true"
+                class="flex-shrink-0 text-white/40 hover:text-white/70 transition-colors mb-px"
+                aria-label="Read full overview"
+                title="Read full overview"
+              ><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></button>
+            </div>` : ""}
+            <!-- Trailer button + Streaming providers -->
+            ${trailer || streamingProviders.length > 0 ? `<div class="mt-2 flex flex-wrap gap-2">
+              ${trailer ? `<button
+                @click="$store.titleModal.trailerKey = '${trailer.key}'; $store.titleModal.showTrailer = true"
+                class="btn gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="6 3 20 12 6 21 6 3"/>
+                </svg>
+                Watch Trailer
+              </button>` : ""}${streamingProviders.map(renderProvider).join("")}
+            </div>` : ""}
             </div>
             <div class="flex-shrink-0">
               ${renderScoreBadge(score, isUnreleased, sources)}
@@ -323,17 +342,17 @@ export const GET: APIRoute = async ({ params, request }) => {
         <div class="sticky top-0 left-0 right-0 h-8 bg-gradient-to-b from-surface-800 to-transparent z-10 pointer-events-none -mb-8"></div>
         <div class="px-4 sm:p-6 space-y-6">
 
-        <!-- Overview -->
-        ${title.overview ? `
-          <p class="text-sm text-white/70 leading-relaxed">${title.overview.replace(/</g, "&lt;")}</p>
-        ` : ""}
-
         <!-- Director -->
         ${directors.length > 0 ? `
           <div>
             ${directors.map(renderDirector).join("")}
           </div>
         ` : ""}
+
+        <!-- Seasons (TV only) — horizontal season pills + episode carousel -->
+        ${mediaType === "tv" && title.seasons && title.seasons.length > 0
+          ? renderSeasonsSection(title.seasons, tmdbId, title.title)
+          : ""}
 
         <!-- Cast -->
         ${cast.length > 0 ? `
@@ -345,33 +364,6 @@ export const GET: APIRoute = async ({ params, request }) => {
           </div>
         ` : ""}
 
-        <!-- Seasons (TV only) — horizontal season pills + episode carousel -->
-        ${mediaType === "tv" && title.seasons && title.seasons.length > 0
-          ? renderSeasonsSection(title.seasons, tmdbId)
-          : ""}
-
-        <!-- Trailer button -->
-        ${trailer ? `
-          <button
-            @click="$store.titleModal.trailerKey = '${trailer.key}'; $store.titleModal.showTrailer = true"
-            class="btn btn-secondary w-full gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="6 3 20 12 6 21 6 3"/>
-            </svg>
-            Watch Trailer
-          </button>
-        ` : ""}
-
-        <!-- Streaming providers -->
-        ${streamingProviders.length > 0 ? `
-          <div>
-            <h3 class="text-sm font-semibold text-white/80 mb-2">Stream On</h3>
-            <div class="flex flex-wrap gap-2">
-              ${streamingProviders.map(renderProvider).join("")}
-            </div>
-          </div>
-        ` : ""}
         </div>
       </div>
     </div>`;

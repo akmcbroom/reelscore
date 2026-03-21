@@ -98,6 +98,87 @@ const { title = "ReelScore" } = Astro.props;
       </div>
     </div>
 
+    <!-- Overview Modal — full description overlay -->
+    <div
+      x-data
+      x-show="$store.titleModal.showOverview"
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0"
+      x-transition:enter-end="opacity-100"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+      @keydown.escape.window="$store.titleModal.showOverview = false"
+      class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style="display: none;"
+    >
+      <div class="fixed inset-0 bg-black/80" @click="$store.titleModal.showOverview = false"></div>
+      <div class="relative w-full max-w-lg rounded-lg bg-surface-800 shadow-2xl p-6 max-h-[80vh] overflow-y-auto" @click.stop>
+        <button
+          @click="$store.titleModal.showOverview = false"
+          class="absolute top-3 right-3 text-white/50 hover:text-white transition-colors"
+          aria-label="Close overview"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+        <h3 class="text-lg font-semibold text-white mb-3">Overview</h3>
+        <p class="text-sm text-white/70 leading-relaxed" id="overview-full-text"></p>
+      </div>
+    </div>
+
+    <!-- Episode Detail Modal — mirrors main modal with still image background -->
+    <div
+      x-data
+      x-show="$store.titleModal.showEpisode"
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0"
+      x-transition:enter-end="opacity-100"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+      @keydown.escape.window="$store.titleModal.showEpisode = false"
+      class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style="display: none;"
+    >
+      <div class="fixed inset-0 bg-black/80" @click="$store.titleModal.showEpisode = false"></div>
+      <div class="relative w-full max-w-lg rounded-lg bg-surface-800 shadow-2xl overflow-hidden" @click.stop>
+        <!-- Still image background with gradient -->
+        <div class="relative">
+          <div class="h-48 sm:h-56 overflow-hidden">
+            <img id="episode-modal-still" src="" alt="" class="h-full w-full object-cover" />
+            <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
+          </div>
+          <!-- Close button -->
+          <button
+            @click="$store.titleModal.showEpisode = false"
+            class="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
+            aria-label="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+            </svg>
+          </button>
+          <!-- Episode info overlay -->
+          <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
+            <p class="text-xs text-white/50" id="episode-modal-show-title"></p>
+            <h2 class="text-lg sm:text-xl font-bold text-white leading-tight mt-1" id="episode-modal-title"></h2>
+            <div class="mt-1.5 flex flex-wrap items-center">
+              <span id="episode-modal-season-ep" class="badge-secondary bg-white/10 backdrop-blur"></span>
+              <span id="episode-modal-airdate" class="badge-secondary bg-transparent"></span>
+              <span id="episode-modal-separator" class="text-white/30">&bull;</span>
+              <span id="episode-modal-runtime" class="badge-secondary bg-transparent"></span>
+            </div>
+          </div>
+        </div>
+        <!-- Description -->
+        <div class="px-4 pb-4 sm:px-6 sm:pb-6">
+          <p class="text-sm text-white/70 leading-relaxed" id="episode-modal-overview"></p>
+        </div>
+      </div>
+    </div>
+
     <script>
       import htmx from "htmx.org";
       import Alpine from "alpinejs";
@@ -117,6 +198,8 @@ const { title = "ReelScore" } = Astro.props;
         mediaType: "movie" as "movie" | "tv",
         trailerKey: "" as string,
         showTrailer: false,
+        showOverview: false,
+        showEpisode: false,
 
         /**
          * Opens the modal for a given title. Updates URL params and
@@ -127,6 +210,8 @@ const { title = "ReelScore" } = Astro.props;
           this.mediaType = mediaType as "movie" | "tv";
           this.open = true;
           this.showTrailer = false;
+          this.showOverview = false;
+          this.showEpisode = false;
           this.trailerKey = "";
 
           // Update URL for shareability/bookmarking — see CLAUDE.md Title Modal
@@ -160,6 +245,8 @@ const { title = "ReelScore" } = Astro.props;
         close() {
           this.open = false;
           this.showTrailer = false;
+          this.showOverview = false;
+          this.showEpisode = false;
           this.trailerKey = "";
 
           // Remove title/type params from URL
