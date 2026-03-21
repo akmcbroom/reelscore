@@ -4,13 +4,16 @@
  * Query params:
  *   type: "movie" | "tv" | "all" (default: "all")
  *   page: page number (default: 1)
+ *   exclude: comma-separated TMDB IDs to filter out (cross-dedup with curated rows)
  *
- * Page 1 is rendered server-side by index.astro.
- * Pages 2+ use TMDB Popular endpoints (movies + TV). Each feed page
- * serves exactly 60 items — the LCM of all grid column counts (2,3,4,5,6) —
- * so every row is always full at every responsive breakpoint.
+ * Grid page 1 is rendered server-side by index.astro (Popular pages 1–3
+ * per type). Pages 2+ use this endpoint with TMDB Popular endpoints
+ * offset to start at page 4 (avoiding overlap with page 1).
+ * Each feed page serves exactly 60 items — the LCM of all grid column
+ * counts (2,3,4,5,6) — so every row is always full at every breakpoint.
  * For "all" type: 2 TMDB pages per type (80 blended → top 60).
  * For single type: 3 TMDB pages (60 items). All fetches run in parallel.
+ * The exclude param filters out curated row TMDB IDs for cross-dedup.
  *
  * Returns HTML fragments (TitleCard markup) for HTMX to swap into the page.
  * See CLAUDE.md Discovery Feeds.
@@ -117,6 +120,16 @@ export const GET: APIRoute = async ({ request }) => {
   const type = url.searchParams.get("type") ?? "all";
   const page = parseInt(url.searchParams.get("page") ?? "1", 10);
 
+  // Cross-dedup: curated row TMDB IDs passed from the home page so
+  // the grid never shows titles already visible in horizontal rows.
+  const excludeParam = url.searchParams.get("exclude") ?? "";
+  const excludeIds = new Set(
+    excludeParam
+      .split(",")
+      .map((s) => parseInt(s, 10))
+      .filter((n) => !isNaN(n))
+  );
+
   const apiKey = env.TMDB_API_KEY;
   const mdblistKey = env.MDBLIST_API_KEY;
   const kv = env.SCORE_CACHE;
@@ -154,8 +167,10 @@ export const GET: APIRoute = async ({ request }) => {
       ...(d3?.results ?? []),
     ];
   } else {
-    // "all" — 2 TMDB pages per type (80 total), blend and take top 60
-    const tmdbStart = (page - 1) * 2 + 1;
+    // "all" — 2 TMDB pages per type (80 total), blend and take top 60.
+    // index.astro consumes Popular pages 1–3 per type for the grid,
+    // so page 2 here starts at TMDB page 4 (offset by 3 instead of 1).
+    const tmdbStart = (page - 1) * 2 + 4;
     const [m1, m2, t1, t2] = await Promise.all([
       getPopularMovies(apiKey, tmdbStart),
       getPopularMovies(apiKey, tmdbStart + 1),
@@ -179,6 +194,11 @@ export const GET: APIRoute = async ({ request }) => {
 
     // Sort blended results by popularity descending so the feed feels cohesive
     items.sort((a, b) => b.popularity - a.popularity);
+  }
+
+  // Filter out titles already shown in curated rows (cross-dedup)
+  if (excludeIds.size > 0) {
+    items = items.filter((item) => !excludeIds.has(item.id));
   }
 
   // Trim to exactly 60 for seamless grid rows at all breakpoints
@@ -221,6 +241,9 @@ export const GET: APIRoute = async ({ request }) => {
 
   const nextPage = page + 1;
   const typeParam = type !== "all" ? `&type=${type}` : "";
+  // Pass exclude IDs through to all subsequent pages so cross-dedup
+  // persists across the entire infinite scroll session.
+  const excludeQueryParam = excludeParam ? `&exclude=${excludeParam}` : "";
   // Max page cap — prevents runaway DOM growth that degrades performance.
   // 10 pages × 60 cards = 600 titles, more than enough for discovery.
   const MAX_PAGES = 10;
@@ -231,7 +254,7 @@ export const GET: APIRoute = async ({ request }) => {
   const loadMoreSentinel = items.length > 0 && page < MAX_PAGES
     ? `<div
         style="grid-column: 1 / -1; height: 1px;"
-        hx-get="/api/feed?page=${nextPage}${typeParam}"
+        hx-get="/api/feed?page=${nextPage}${typeParam}${excludeQueryParam}"
         hx-trigger="intersect threshold:0.1"
         hx-target="#grid-feed"
         hx-swap="beforeend"

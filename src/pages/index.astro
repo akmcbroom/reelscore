@@ -1,19 +1,24 @@
 ---
 /**
- * Home page — Unified discovery feed.
- * Uses TMDB Popular endpoints (movies + TV) for a consistent feed
- * from top to bottom. Both types are fetched in parallel, blended,
- * deduplicated, and sorted by popularity. Pagination (page 2+) uses
- * the same Popular endpoints via the /api/feed HTMX endpoint.
- * See CLAUDE.md Discovery Feeds.
+ * Home page — Hybrid discovery feed.
+ * Top: curated horizontal rows (In Theaters/Airing Now, Trending, New Releases).
+ * Bottom: blended infinite scroll grid (TMDB Popular movies + TV).
+ * All data fetched in parallel, scored via single getScoresBatched call.
+ * Grid is cross-deduplicated against curated row IDs.
+ * See CLAUDE.md Discovery Feed (Home Page).
  */
 
 import Layout from "../layouts/Layout.astro";
 import TitleCard from "../components/TitleCard.astro";
+import CuratedRow from "../components/CuratedRow.astro";
 import FeedSection from "../components/FeedSection.astro";
 import {
   getPopularMovies,
   getPopularTV,
+  getNowPlaying,
+  getOnTheAir,
+  getTrending,
+  getUpcoming,
   getDisplayTitle,
   getReleaseDate,
   type TmdbTrendingItem,
@@ -26,41 +31,89 @@ const apiKey = env.TMDB_API_KEY;
 const mdblistKey = env.MDBLIST_API_KEY;
 const kv = env.SCORE_CACHE;
 
-// 60 items per page = LCM(2,3,4,5,6) — fills complete rows at every
-// responsive breakpoint so there are never gaps in the grid.
-// Fetch 2 TMDB pages per type (20 each = 80 total), blend, take top 60.
-const [moviesData1, moviesData2, tvData1, tvData2] = await Promise.all([
+// --- Fetch all data in parallel ---
+// Curated rows: 1 TMDB page per endpoint (20 items each).
+// Grid: 2 TMDB pages per type (80 blended → top 60).
+// Grid fetches 3 pages per type (120 total) instead of 2 (80) to ensure
+// we still get 60 items after filtering out curated IDs (~47 overlap).
+const [
+  nowPlayingData,
+  onTheAirData,
+  trendingData,
+  upcomingData,
+  gridMovies1,
+  gridMovies2,
+  gridMovies3,
+  gridTv1,
+  gridTv2,
+  gridTv3,
+] = await Promise.all([
+  getNowPlaying(apiKey, 1),
+  getOnTheAir(apiKey, 1),
+  getTrending(apiKey, 1),
+  getUpcoming(apiKey, 1),
   getPopularMovies(apiKey, 1),
   getPopularMovies(apiKey, 2),
+  getPopularMovies(apiKey, 3),
   getPopularTV(apiKey, 1),
   getPopularTV(apiKey, 2),
+  getPopularTV(apiKey, 3),
 ]);
 
-// Blend movies and TV, deduplicate by TMDB ID, sort by popularity.
-// This interleaves both types naturally instead of chunking by type.
-const seen = new Set<number>();
-const combined: TmdbTrendingItem[] = [];
+// --- Build curated rows (inter-row deduplicated) ---
+// Each row filters out IDs already claimed by prior rows so no title
+// appears in more than one curated section.
+const curatedIds = new Set<number>();
+
+// Helper: deduplicate against prior rows, sort by popularity, take 20
+function buildRow(items: TmdbTrendingItem[]): TmdbTrendingItem[] {
+  const unique = items.filter((item) => !curatedIds.has(item.id));
+  unique.sort((a, b) => b.popularity - a.popularity);
+  const row = unique.slice(0, 20);
+  for (const item of row) curatedIds.add(item.id);
+  return row;
+}
+
+// Row 1: In Theaters & Airing Now — blend movies + TV
+const inTheaters = buildRow([
+  ...(nowPlayingData?.results ?? []),
+  ...(onTheAirData?.results ?? []),
+]);
+
+// Row 2: Trending This Week
+const trending = buildRow(trendingData?.results ?? []);
+
+// Row 3: New Releases
+const newReleases = buildRow(upcomingData?.results ?? []);
+
+// --- Build grid (cross-deduplicated against curated rows) ---
+const gridSeen = new Set<number>();
+const gridItems: TmdbTrendingItem[] = [];
 
 for (const result of [
-  ...(moviesData1?.results ?? []),
-  ...(moviesData2?.results ?? []),
-  ...(tvData1?.results ?? []),
-  ...(tvData2?.results ?? []),
+  ...(gridMovies1?.results ?? []),
+  ...(gridMovies2?.results ?? []),
+  ...(gridMovies3?.results ?? []),
+  ...(gridTv1?.results ?? []),
+  ...(gridTv2?.results ?? []),
+  ...(gridTv3?.results ?? []),
 ]) {
-  if (!seen.has(result.id)) {
-    seen.add(result.id);
-    combined.push(result);
+  // Skip titles already in curated rows or already seen in grid
+  if (!curatedIds.has(result.id) && !gridSeen.has(result.id)) {
+    gridSeen.add(result.id);
+    gridItems.push(result);
   }
 }
 
-// Sort by TMDB popularity descending — interleaves movies and TV naturally
-combined.sort((a, b) => b.popularity - a.popularity);
+gridItems.sort((a, b) => b.popularity - a.popularity);
+gridItems.length = Math.min(gridItems.length, 60);
 
-// Trim to exactly 60 for seamless grid rows at all breakpoints
-combined.length = Math.min(combined.length, 60);
+// --- Score everything in one batch ---
+// Combine curated + grid items for a single getScoresBatched call
+// to minimize MDbList API calls and maximize KV cache hits.
+const allItems = [...inTheaters, ...trending, ...newReleases, ...gridItems];
 
-// Fetch scores in rate-limited batches
-const scoreInputs = combined.map((item) => ({
+const scoreInputs = allItems.map((item) => ({
   tmdbId: item.id,
   mediaType: (item.media_type ?? "movie") as "movie" | "tv",
   releaseDate: getReleaseDate(item) ?? null,
@@ -68,26 +121,107 @@ const scoreInputs = combined.map((item) => ({
 
 const allScoreData = await getScoresBatched(kv, mdblistKey, scoreInputs);
 
-// Calculate ReelScores from fetched data
-const scoredItems = combined.map((item, i) => {
+// Map scores back to items
+const allScored = allItems.map((item, i) => {
   const scoreData = allScoreData[i];
   const result = scoreData ? calculateReelScore(scoreData.scores) : null;
-
   return {
     item,
     score: result?.score ?? null,
     sources: result?.sources ?? [],
   };
 });
+
+// Split scored results back into curated rows and grid
+const inTheaterScored = allScored.slice(0, inTheaters.length);
+const trendingScored = allScored.slice(
+  inTheaters.length,
+  inTheaters.length + trending.length
+);
+const newReleasesScored = allScored.slice(
+  inTheaters.length + trending.length,
+  inTheaters.length + trending.length + newReleases.length
+);
+const gridScored = allScored.slice(
+  inTheaters.length + trending.length + newReleases.length
+);
+
+// Build exclude list for page 2+ cross-dedup (comma-separated TMDB IDs)
+const excludeParam = Array.from(curatedIds).join(",");
 ---
 
 <Layout title="Home">
   <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+
+    {/* --- Curated Horizontal Rows --- */}
+
+    {inTheaterScored.length > 0 && (
+      <CuratedRow title="In Theaters & Airing Now">
+        {inTheaterScored.map(({ item, score, sources }) => (
+          <div class="flex-shrink-0 w-36 sm:w-40">
+            <TitleCard
+              tmdbId={item.id}
+              title={getDisplayTitle(item)}
+              posterPath={item.poster_path}
+              mediaType={(item.media_type ?? "movie") as "movie" | "tv"}
+              releaseDate={getReleaseDate(item)}
+              score={score}
+              sources={sources}
+              voteCount={item.vote_count}
+            />
+          </div>
+        ))}
+      </CuratedRow>
+    )}
+
+    {trendingScored.length > 0 && (
+      <CuratedRow title="Trending This Week">
+        {trendingScored.map(({ item, score, sources }) => (
+          <div class="flex-shrink-0 w-36 sm:w-40">
+            <TitleCard
+              tmdbId={item.id}
+              title={getDisplayTitle(item)}
+              posterPath={item.poster_path}
+              mediaType={(item.media_type ?? "movie") as "movie" | "tv"}
+              releaseDate={getReleaseDate(item)}
+              score={score}
+              sources={sources}
+              voteCount={item.vote_count}
+            />
+          </div>
+        ))}
+      </CuratedRow>
+    )}
+
+    {newReleasesScored.length > 0 && (
+      <CuratedRow title="New Releases">
+        {newReleasesScored.map(({ item, score, sources }) => (
+          <div class="flex-shrink-0 w-36 sm:w-40">
+            <TitleCard
+              tmdbId={item.id}
+              title={getDisplayTitle(item)}
+              posterPath={item.poster_path}
+              mediaType={(item.media_type ?? "movie") as "movie" | "tv"}
+              releaseDate={getReleaseDate(item)}
+              score={score}
+              sources={sources}
+              voteCount={item.vote_count}
+            />
+          </div>
+        ))}
+      </CuratedRow>
+    )}
+
+    {/* --- Blended Infinite Scroll Grid --- */}
+    {/* Cross-deduplicated: curated row IDs excluded from grid.
+        The exclude param passes curated IDs to page 2+ requests
+        so the feed API can continue filtering them out. */}
+
     <FeedSection
       section="feed"
-      loadMoreUrl="/api/feed?page=2"
+      loadMoreUrl={`/api/feed?page=2&exclude=${excludeParam}`}
     >
-      {scoredItems.map(({ item, score, sources }) => (
+      {gridScored.map(({ item, score, sources }) => (
         <TitleCard
           tmdbId={item.id}
           title={getDisplayTitle(item)}
