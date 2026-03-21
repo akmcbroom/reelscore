@@ -1,7 +1,7 @@
 ---
 /**
  * Home page — Hybrid discovery feed.
- * Top: curated horizontal rows (In Theaters/Airing Now, Trending, New Releases).
+ * Top: New Releases curated row (Discover movies + TV, US-filtered).
  * Bottom: blended infinite scroll grid (TMDB Popular movies + TV).
  * All data fetched in parallel, scored via single getScoresBatched call.
  * Grid is cross-deduplicated against curated row IDs.
@@ -15,10 +15,8 @@ import FeedSection from "../components/FeedSection.astro";
 import {
   getPopularMovies,
   getPopularTV,
-  getNowPlaying,
-  getOnTheAir,
-  getTrending,
-  getUpcoming,
+  getNewReleaseMovies,
+  getNewReleaseTV,
   getDisplayTitle,
   getReleaseDate,
   type TmdbTrendingItem,
@@ -32,15 +30,12 @@ const mdblistKey = env.MDBLIST_API_KEY;
 const kv = env.SCORE_CACHE;
 
 // --- Fetch all data in parallel ---
-// Curated rows: 1 TMDB page per endpoint (20 items each).
-// Grid: 2 TMDB pages per type (80 blended → top 60).
-// Grid fetches 3 pages per type (120 total) instead of 2 (80) to ensure
-// we still get 60 items after filtering out curated IDs (~47 overlap).
+// New Releases: Discover movies (region=US) + Discover TV (watch_region=US).
+// Grid: 3 TMDB pages per type (120 total) to ensure 60 items after
+// filtering out curated row IDs.
 const [
-  nowPlayingData,
-  onTheAirData,
-  trendingData,
-  upcomingData,
+  newMoviesData,
+  newTvData,
   gridMovies1,
   gridMovies2,
   gridMovies3,
@@ -48,10 +43,8 @@ const [
   gridTv2,
   gridTv3,
 ] = await Promise.all([
-  getNowPlaying(apiKey, 1),
-  getOnTheAir(apiKey, 1),
-  getTrending(apiKey, 1),
-  getUpcoming(apiKey, 1),
+  getNewReleaseMovies(apiKey, 1),
+  getNewReleaseTV(apiKey, 1),
   getPopularMovies(apiKey, 1),
   getPopularMovies(apiKey, 2),
   getPopularMovies(apiKey, 3),
@@ -60,34 +53,25 @@ const [
   getPopularTV(apiKey, 3),
 ]);
 
-// --- Build curated rows (inter-row deduplicated) ---
-// Each row filters out IDs already claimed by prior rows so no title
-// appears in more than one curated section.
-const curatedIds = new Set<number>();
-
-// Helper: deduplicate against prior rows, optionally sort by popularity, take 20.
-// preserveOrder=true skips the popularity sort to keep the API's native ranking
-// (e.g., TMDB's trending algorithm captures recent engagement spikes, which
-// differs from the raw lifetime popularity number).
-function buildRow(items: TmdbTrendingItem[], preserveOrder = false): TmdbTrendingItem[] {
-  const unique = items.filter((item) => !curatedIds.has(item.id));
-  if (!preserveOrder) unique.sort((a, b) => b.popularity - a.popularity);
-  const row = unique.slice(0, 20);
-  for (const item of row) curatedIds.add(item.id);
-  return row;
+// --- Build New Releases row ---
+// Blend movies + TV, deduplicate by TMDB ID, sort by popularity, take 20.
+const newReleaseSeen = new Set<number>();
+const newReleaseItems: TmdbTrendingItem[] = [];
+for (const item of [
+  ...(newMoviesData?.results ?? []),
+  ...(newTvData?.results ?? []),
+]) {
+  if (!newReleaseSeen.has(item.id)) {
+    newReleaseSeen.add(item.id);
+    newReleaseItems.push(item);
+  }
 }
+newReleaseItems.sort((a, b) => b.popularity - a.popularity);
+const newReleases = newReleaseItems.slice(0, 20);
 
-// Row 1: In Theaters & Airing Now — blend movies + TV, sort by popularity
-const inTheaters = buildRow([
-  ...(nowPlayingData?.results ?? []),
-  ...(onTheAirData?.results ?? []),
-]);
-
-// Row 2: Trending This Week — preserve TMDB's native trending order
-const trending = buildRow(trendingData?.results ?? [], true);
-
-// Row 3: New Releases
-const newReleases = buildRow(upcomingData?.results ?? []);
+// Track curated IDs so the grid below doesn't repeat them.
+const curatedIds = new Set<number>();
+for (const item of newReleases) curatedIds.add(item.id);
 
 // --- Build grid (cross-deduplicated against curated rows) ---
 const gridSeen = new Set<number>();
@@ -114,7 +98,7 @@ gridItems.length = Math.min(gridItems.length, 60);
 // --- Score everything in one batch ---
 // Combine curated + grid items for a single getScoresBatched call
 // to minimize MDbList API calls and maximize KV cache hits.
-const allItems = [...inTheaters, ...trending, ...newReleases, ...gridItems];
+const allItems = [...newReleases, ...gridItems];
 
 const scoreInputs = allItems.map((item) => ({
   tmdbId: item.id,
@@ -135,19 +119,9 @@ const allScored = allItems.map((item, i) => {
   };
 });
 
-// Split scored results back into curated rows and grid
-const inTheaterScored = allScored.slice(0, inTheaters.length);
-const trendingScored = allScored.slice(
-  inTheaters.length,
-  inTheaters.length + trending.length
-);
-const newReleasesScored = allScored.slice(
-  inTheaters.length + trending.length,
-  inTheaters.length + trending.length + newReleases.length
-);
-const gridScored = allScored.slice(
-  inTheaters.length + trending.length + newReleases.length
-);
+// Split scored results back into curated row and grid
+const newReleasesScored = allScored.slice(0, newReleases.length);
+const gridScored = allScored.slice(newReleases.length);
 
 // Build exclude list for page 2+ cross-dedup (comma-separated TMDB IDs)
 const excludeParam = Array.from(curatedIds).join(",");
@@ -157,44 +131,6 @@ const excludeParam = Array.from(curatedIds).join(",");
   <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
     {/* --- Curated Horizontal Rows --- */}
-
-    {inTheaterScored.length > 0 && (
-      <CuratedRow title="In Theaters & Airing Now">
-        {inTheaterScored.map(({ item, score, sources }) => (
-          <div class="flex-shrink-0 w-36 sm:w-40">
-            <TitleCard
-              tmdbId={item.id}
-              title={getDisplayTitle(item)}
-              posterPath={item.poster_path}
-              mediaType={(item.media_type ?? "movie") as "movie" | "tv"}
-              releaseDate={getReleaseDate(item)}
-              score={score}
-              sources={sources}
-              voteCount={item.vote_count}
-            />
-          </div>
-        ))}
-      </CuratedRow>
-    )}
-
-    {trendingScored.length > 0 && (
-      <CuratedRow title="Trending This Week">
-        {trendingScored.map(({ item, score, sources }) => (
-          <div class="flex-shrink-0 w-36 sm:w-40">
-            <TitleCard
-              tmdbId={item.id}
-              title={getDisplayTitle(item)}
-              posterPath={item.poster_path}
-              mediaType={(item.media_type ?? "movie") as "movie" | "tv"}
-              releaseDate={getReleaseDate(item)}
-              score={score}
-              sources={sources}
-              voteCount={item.vote_count}
-            />
-          </div>
-        ))}
-      </CuratedRow>
-    )}
 
     {newReleasesScored.length > 0 && (
       <CuratedRow title="New Releases">

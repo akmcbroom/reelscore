@@ -161,6 +161,7 @@ export interface TmdbTrendingItem {
   vote_count: number;
   popularity: number;
   genre_ids: number[];
+  original_language: string;
   release_date?: string;
   first_air_date?: string;
 }
@@ -473,131 +474,26 @@ export async function searchTitles(
   return response;
 }
 
-// --- Feed Endpoints (Trending, Now Playing, etc.) ---
-
-/**
- * Fetches trending movies and TV shows for the week.
- *
- * @param apiKey - TMDB API key
- * @param page - Page number (1-based, 20 results per page from TMDB)
- * @returns Paginated trending results
- */
-export async function getTrending(
-  apiKey: string,
-  page = 1
-): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  return tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
-    apiKey,
-    "/trending/all/week",
-    { page: String(page) }
-  );
-}
-
-/**
- * Fetches movies currently in theaters.
- *
- * @param apiKey - TMDB API key
- * @param page - Page number
- * @returns Paginated now-playing movies
- */
-export async function getNowPlaying(
-  apiKey: string,
-  page = 1
-): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
-    apiKey,
-    "/movie/now_playing",
-    { page: String(page) }
-  );
-
-  if (!response) return null;
-
-  // now_playing returns movies without media_type — add it
-  response.results = response.results.map((r) => ({
-    ...r,
-    media_type: "movie" as const,
-  }));
-
-  return response;
-}
-
-/**
- * Fetches TV shows currently on the air.
- *
- * @param apiKey - TMDB API key
- * @param page - Page number
- * @returns Paginated on-the-air TV shows
- */
-export async function getOnTheAir(
-  apiKey: string,
-  page = 1
-): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
-    apiKey,
-    "/tv/on_the_air",
-    { page: String(page) }
-  );
-
-  if (!response) return null;
-
-  // on_the_air returns TV shows without media_type — add it
-  response.results = response.results.map((r) => ({
-    ...r,
-    media_type: "tv" as const,
-    // TV shows use "name" instead of "title"
-  }));
-
-  return response;
-}
-
-/**
- * Fetches upcoming movies.
- *
- * @param apiKey - TMDB API key
- * @param page - Page number
- * @returns Paginated upcoming movies
- */
-export async function getUpcoming(
-  apiKey: string,
-  page = 1
-): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
-    apiKey,
-    "/movie/upcoming",
-    { page: String(page) }
-  );
-
-  if (!response) return null;
-
-  response.results = response.results.map((r) => ({
-    ...r,
-    media_type: "movie" as const,
-  }));
-
-  return response;
-}
-
 // --- Popular (Deep Pagination) ---
 
 /**
- * Fetches popular movies from TMDB, filtered to US releases.
- * Uses the Discover endpoint with watch_region=US and with_release_type
- * to ensure only titles available in the US are returned.
- * Unlike trending (which has ~40 titles total), discover has 500+ pages,
- * making it ideal for infinite scroll pagination.
+ * Fetches popular movies from TMDB, filtered to US availability.
+ * Uses the Discover endpoint with watch_region=US to ensure only
+ * titles available in the US are returned. No language filter —
+ * non-English hits with US distribution (Squid Game, Parasite, etc.)
+ * should still appear. Has 500+ pages — ideal for infinite scroll.
  *
  * @param apiKey - TMDB API key
  * @param page - Page number (1-based, 20 results per page)
- * @returns Paginated popular movies with US releases
+ * @returns Paginated popular movies with US availability
  */
 export async function getPopularMovies(
   apiKey: string,
   page = 1
 ): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  // Discover endpoint supports proper region filtering.
-  // watch_region=US limits to titles available in the US.
-  // sort_by=popularity.desc gives the same ordering as /movie/popular.
-  // See CLAUDE.md "U.S. releases only".
+  // Discover endpoint with watch_region=US filters to titles
+  // available on US streaming/theatrical. No language filter —
+  // see CLAUDE.md "U.S. releases only" (region, not language).
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
     "/discover/movie",
@@ -605,7 +501,6 @@ export async function getPopularMovies(
       page: String(page),
       sort_by: "popularity.desc",
       watch_region: "US",
-      with_original_language: "en",
     }
   );
 
@@ -621,20 +516,22 @@ export async function getPopularMovies(
 }
 
 /**
- * Fetches popular TV shows from TMDB, filtered to US releases.
+ * Fetches popular TV shows from TMDB, filtered to US availability.
  * Uses the Discover endpoint with watch_region=US for proper region filtering.
+ * No language filter — non-English hits with US distribution should appear.
  * Has 500+ pages — ideal for deep pagination.
  *
  * @param apiKey - TMDB API key
  * @param page - Page number (1-based, 20 results per page)
- * @returns Paginated popular TV shows with US releases
+ * @returns Paginated popular TV shows with US availability
  */
 export async function getPopularTV(
   apiKey: string,
   page = 1
 ): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  // Discover endpoint with English language + US watch region.
-  // See CLAUDE.md "U.S. releases only".
+  // Discover endpoint with watch_region=US filters to shows
+  // available on US platforms. No language filter —
+  // see CLAUDE.md "U.S. releases only" (region, not language).
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
     "/discover/tv",
@@ -642,13 +539,110 @@ export async function getPopularTV(
       page: String(page),
       sort_by: "popularity.desc",
       watch_region: "US",
-      with_original_language: "en",
     }
   );
 
   if (!response) return null;
 
   // Discover endpoint returns TV shows without media_type — add it
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "tv" as const,
+  }));
+
+  return response;
+}
+
+// --- Curated Row Endpoints (Discover-based, US-filtered) ---
+
+/**
+ * Fetches new and upcoming movie releases in the US via Discover.
+ * Uses region=US so release_date filters apply to US release dates
+ * (foreign films with US distribution like Squid Game pass through).
+ * 45-day lookback + 7-day lookahead covers recent + imminent releases.
+ * vote_count.gte=10 filters out zero-audience content.
+ * Sorted by popularity so mainstream titles surface first.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number
+ * @returns Paginated new release movies (US)
+ */
+export async function getNewReleaseMovies(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const now = new Date();
+  const past = new Date(now);
+  past.setDate(past.getDate() - 45);
+  const future = new Date(now);
+  future.setDate(future.getDate() + 7);
+  const dateGte = past.toISOString().split("T")[0];
+  const dateLte = future.toISOString().split("T")[0];
+
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/discover/movie",
+    {
+      page: String(page),
+      sort_by: "popularity.desc",
+      region: "US",
+      "release_date.gte": dateGte,
+      "release_date.lte": dateLte,
+      "vote_count.gte": "10",
+    }
+  );
+
+  if (!response) return null;
+
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "movie" as const,
+  }));
+
+  return response;
+}
+
+/**
+ * Fetches new and upcoming TV releases in the US via Discover.
+ * Uses watch_region=US to filter to shows available on US platforms.
+ * Uses first_air_date (series premiere date) instead of air_date so
+ * only genuinely new shows appear — not long-running series like
+ * Grey's Anatomy that just happen to have recent episodes.
+ * 6-month lookback + 7-day lookahead covers recent premieres.
+ * vote_count.gte=10 filters out zero-audience content.
+ * Sorted by popularity so mainstream titles surface first.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number
+ * @returns Paginated newly-premiered TV shows (US)
+ */
+export async function getNewReleaseTV(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const now = new Date();
+  const past = new Date(now);
+  past.setDate(past.getDate() - 180);
+  const future = new Date(now);
+  future.setDate(future.getDate() + 7);
+  const dateGte = past.toISOString().split("T")[0];
+  const dateLte = future.toISOString().split("T")[0];
+
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/discover/tv",
+    {
+      page: String(page),
+      sort_by: "popularity.desc",
+      watch_region: "US",
+      "first_air_date.gte": dateGte,
+      "first_air_date.lte": dateLte,
+      "vote_count.gte": "10",
+    }
+  );
+
+  if (!response) return null;
+
   response.results = response.results.map((r) => ({
     ...r,
     media_type: "tv" as const,

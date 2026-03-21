@@ -104,8 +104,9 @@ reelscore/
 │   │   ├── TitleCard.astro     # Media card (poster + score pill + actions)
 │   │   ├── TitleModal.astro    # Detail modal (rating, cast, trailer, etc.)
 │   │   ├── ScoreBadge.astro    # ReelScore pill with color coding
+│   │   ├── CuratedRow.astro    # Horizontal scrollable row (New Releases)
 │   │   ├── StickyHeader.astro  # Search, filters, media type toggle, sort
-│   │   ├── FeedSection.astro   # Feed section (trending, new, etc.)
+│   │   ├── FeedSection.astro   # Feed section (grid with infinite scroll)
 │   │   └── OnboardingStep.astro
 │   ├── layouts/
 │   │   └── Layout.astro        # Base HTML shell, head, global styles
@@ -128,7 +129,8 @@ reelscore/
 ├── wrangler.toml               # Cloudflare Workers config (D1 + KV bindings)
 ├── tests/                      # Test files mirror src/lib/ structure
 │   ├── scoring.test.ts
-│   ├── personalization.test.ts
+│   ├── tmdb.test.ts
+│   ├── setup.test.ts
 │   └── api/                    # API endpoint integration tests
 ├── package.json
 ├── README.md                   # User-facing project readme (keep in sync)
@@ -257,33 +259,30 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ### Discovery Feed (Home Page)
 
-**Hybrid layout** — curated horizontal rows at the top, blended infinite scroll grid below.
+**Hybrid layout** — one curated horizontal row at the top, blended infinite scroll grid below.
 
 #### Scored for You Row (logged-in only)
 - Appears at the very top of the page for logged-in users with `onboarding_completed = true`. See "Scored for You" Feed in Personalization System for full spec.
 - Users without completed onboarding see a CTA prompt instead.
 
-#### Curated Horizontal Rows
-- **3 rows** below Scored for You (or at the top for anonymous users):
-  1. **In Theaters & Airing Now** — `getNowPlaying()` + `getOnTheAir()` blended by popularity.
-  2. **Trending This Week** — `getTrending()`.
-  3. **New Releases** — `getUpcoming()` + recently aired TV.
-- Each row: **20 titles**, horizontally scrollable (`flex overflow-x-auto scrollbar-hide` — same pattern as episode/cast carousels).
-- Each row fetches 1 TMDB page per endpoint. All fetched in parallel with each other and with the grid.
-- All rows scored via `getScoresBatched` (combined with grid items into a single batch call).
-- Rows use TitleCard components (same as grid cards).
-- Curated rows are **SSR only** (rendered on page 1) — no HTMX pagination for rows.
+#### New Releases Row
+- **1 curated row** below Scored for You (or at the top for anonymous users):
+  - **New Releases** — `getNewReleaseMovies()` + `getNewReleaseTV()` blended by popularity. Movies use TMDB Discover with `region=US` + `release_date` (45-day lookback, 7-day lookahead). TV uses Discover with `watch_region=US` + `first_air_date` (6-month lookback, 7-day lookahead — only genuinely new shows, not long-running series with recent episodes). Both use `vote_count.gte=10` to filter zero-audience content and `sort_by=popularity.desc`.
+- **20 titles**, horizontally scrollable (`flex overflow-x-auto scrollbar-hide`).
+- Scored via `getScoresBatched` (combined with grid items into a single batch call).
+- Uses TitleCard components (same as grid cards).
+- **SSR only** (rendered on page 1) — no HTMX pagination for rows.
 
-#### Blended Infinite Scroll Grid
-- Below the curated rows. Uses TMDB Popular endpoints (`movie/popular` + `tv/popular`), blended, deduplicated by TMDB ID, sorted by popularity.
-- **Cross-deduplicated:** All TMDB IDs from the curated rows (~60 IDs) are filtered out of the grid so no title appears twice on the page. Page 2+ grid requests accept an `exclude` param (comma-separated TMDB IDs).
+#### Blended Infinite Scroll Grid (Discover)
+- Below the curated row. Uses TMDB Discover endpoints (`/discover/movie` + `/discover/tv`) with `watch_region=US` and `sort_by=popularity.desc`. No language filter — non-English titles with US distribution (Squid Game, Parasite, etc.) appear naturally.
+- **Cross-deduplicated:** All TMDB IDs from the New Releases row (~20 IDs) are filtered out of the grid so no title appears twice on the page. Page 2+ grid requests accept an `exclude` param (comma-separated TMDB IDs).
 - **60 items per page** — the LCM of all grid column counts (2,3,4,5,6) so every row is always full at every responsive breakpoint. For "all" type: 2 TMDB pages per type (80 blended → top 60). For single type: 3 TMDB pages (60 items). All TMDB fetches run in parallel.
 - Capped at **10 pages** (600 titles) to prevent DOM bloat. Scroll sentinels use HTMX `intersect` trigger (IntersectionObserver-based) — NOT `revealed`, which fires on DOM insertion and causes runaway loading.
 
 #### SSR Page 1 Data Flow
-- Fetch curated rows + grid page 1 **all in parallel** (existing TMDB functions support this).
+- Fetch New Releases row + grid page 1 **all in parallel** (8 TMDB calls total).
 - Score all items via a single `getScoresBatched` call (curated + grid combined).
-- Render: Scored for You row (if applicable) → curated rows → grid with sentinel.
+- Render: Scored for You row (if applicable) → New Releases row → grid with sentinel.
 
 #### General
 - All feeds are **URL-param driven**: active filters update URL, fully shareable/bookmarkable.
@@ -436,7 +435,7 @@ Notifications are detected **lazily**, not via background cron jobs:
 ## API Endpoints
 
 ### Public (no auth)
-- `GET /api/feed?type=movie|tv|all&page=X&exclude=id1,id2,...` — Blended grid feed (HTMX partial). Uses TMDB Popular endpoints for deep pagination. Optional `exclude` param filters out TMDB IDs already shown in curated rows (cross-deduplication). Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
+- `GET /api/feed?type=movie|tv|all&page=X&exclude=id1,id2,...` — Blended grid feed (HTMX partial). Uses TMDB Discover endpoints (`watch_region=US`, no language filter) for deep pagination. Optional `exclude` param filters out TMDB IDs already shown in the New Releases row (cross-deduplication). Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
 - `GET /api/search?q=X&type=X&genre=X&page=X` — Search results (HTMX partial)
 - `GET /api/title/{tmdb_id}?type=movie|tv` — Title modal content (HTMX partial)
 - `GET /api/season/{tv_id}?season=N&show=ShowTitle` — Season episodes carousel (HTMX partial)
@@ -463,12 +462,12 @@ Notifications are detected **lazily**, not via background cron jobs:
 
 Even though everything is v1, build in this sequence so each layer has its foundation.
 
-**Progress:** Steps 1–3 and 5 are complete. Step 4 is partially complete (blended grid works, hybrid layout with curated rows still needed). Steps 6–16 are not started.
+**Progress:** Steps 1–5 are complete. Steps 6–16 are not started.
 
 1. ~~**Project scaffold**~~ — Astro + Cloudflare adapter + Tailwind + Basecoat + Drizzle + D1/KV bindings. Deployed to Workers. **Done.**
 2. ~~**Score engine**~~ — MDbList API integration, score normalization, ReelScore calculation, KV caching, score refresh. `scoring.ts` and `mdblist.ts` with tests. **Done.**
 3. ~~**TMDB integration**~~ — Metadata fetching (title details, cast, genres, images, streaming availability), KV caching. `tmdb.ts` with full endpoint coverage. **Done.**
-4. **Discovery feeds** — Hybrid home page: curated horizontal rows (In Theaters/Airing Now, Trending, New Releases) at top, blended infinite scroll grid below. Cross-deduplication between rows and grid. Title cards. HTMX partials. URL-param filter state. **In progress** — blended grid with 60-item pages and infinite scroll works; curated rows and cross-dedup still needed.
+4. ~~**Discovery feeds**~~ — Hybrid home page: New Releases curated row (Discover movies + TV, US-filtered, quality-filtered) at top, blended Discover grid below. Cross-deduplication between row and grid. Title cards. HTMX partials. URL-param filter state. **Done.**
 5. ~~**Title modal**~~ — Detail view with score, metadata, cast, genres, trailer, seasons/episodes. URL-param driven (`?title=X`). Alpine store state. **Done.**
 6. **Sticky header + Search** — StickyHeader.astro with search input, media type toggle, genre filter, sort options, streaming platform filter. Build `search.astro` page and `/api/search` endpoint. Wire all filter state to URL params.
 7. **Auth** — Build `db.ts` (Drizzle client factory) and `auth.ts` (Better Auth instance factory). Create database schema tables (users, preferences, ratings, watchlist, hidden titles, notifications). Login/signup pages, OAuth callback, `/api/auth/*` catch-all. Confirm auth works end-to-end before building personalization.
@@ -514,7 +513,7 @@ Even though everything is v1, build in this sequence so each layer has its found
 - Used for: title metadata, images, cast/crew, genres, streaming availability (watch providers), search, onboarding title lists (genre-aware via Discover), and Scored for You candidate sourcing (Discover with `with_genres` and `with_people`).
 - **NOT used for scores** — all scores come from MDbList.
 - Streaming availability data comes from TMDB's watch/providers endpoint — quality varies by region but is acceptable for U.S. content.
-- **Discover API** used for: curated feed rows (now playing, trending, upcoming), Scored for You candidate pool (genre/actor/director queries), and onboarding title rating step (genre-aware selection).
+- **Discover API** used for: New Releases curated row (movies with `region=US` + `release_date`, TV with `watch_region=US` + `first_air_date`), Popular grid (movies + TV with `watch_region=US`), Scored for You candidate pool (genre/actor/director queries), and onboarding title rating step (genre-aware selection). No language filter on any Discover call — non-English titles with US distribution appear naturally.
 - **Not used for:** similar/related title recommendations (deferred).
 
 ---
