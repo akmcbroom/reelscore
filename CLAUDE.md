@@ -248,8 +248,8 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ### Discovery Feed (Home Page)
 
-- **Single unified feed** — uses TMDB Popular endpoints (`movie/popular` + `tv/popular`) for all pages. Both types are fetched in parallel, blended, deduplicated by TMDB ID, and sorted by popularity. This provides consistent content from top to bottom with 500+ pages of depth for infinite scroll.
-- No separate sections or tabs — one continuous, infinitely-scrolling feed.
+- **Single unified feed** — uses TMDB Popular endpoints (`movie/popular` + `tv/popular`) for all pages. Both types are fetched in parallel, blended, deduplicated by TMDB ID, and sorted by popularity. This provides consistent content from top to bottom.
+- No separate sections or tabs — one continuous, infinitely-scrolling feed. Capped at **20 pages** (~520 titles) to prevent DOM bloat. Scroll sentinels use HTMX `intersect` trigger (IntersectionObserver-based) — NOT `revealed`, which fires on DOM insertion and causes runaway loading.
 - Scored for You feed (logged-in only) is a future addition (Build Order Step 11).
 - All feeds are **URL-param driven**: active filters update URL, fully shareable/bookmarkable.
 - Clicking a title card opens its detail modal inline (no page navigation, preserves scroll position).
