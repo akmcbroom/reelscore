@@ -309,7 +309,7 @@ export const GET: APIRoute = async ({ params, request }) => {
       <!-- Sticky header — backdrop + title info, stays fixed while body scrolls -->
       <div class="relative flex-shrink-0">
         <!-- Backdrop image -->
-        <div class="relative h-48 sm:h-56 md:h-64 overflow-hidden rounded-t-lg">
+        <div class="relative h-full aspect-video overflow-hidden rounded-t-lg">
           ${backdropUrl
             ? `<img src="${backdropUrl}" alt="" class="h-full w-full object-cover" />`
             : `<div class="h-full w-full bg-surface-700"></div>`
@@ -331,11 +331,11 @@ export const GET: APIRoute = async ({ params, request }) => {
           <div class="absolute bottom-0 left-0 right-0 p-4 pb-0 sm:p-6 sm:pb-0 flex items-start gap-4">
             <div class="flex-1 min-w-0">
               <h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>
-              <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-white/60">
-                <span class="badge-secondary text-[10px] px-1.5 py-0">${typeBadge}</span>
-                ${year ? `<span>${year}</span>` : ""}
-                ${contentRating ? `<span class="border border-white/20 rounded px-1.5 py-0 text-xs">${contentRating}</span>` : ""}
-                ${runtimeDisplay ? `<span>${runtimeDisplay}</span>` : ""}
+              <div class="mt-1.5 flex flex-wrap items-center gap-1 text-sm text-white/60">
+                <span>${mediaType === "tv" ? "TV Show" : "Movie"}</span>
+                ${year ? `<span>•</span><span>${year}</span>` : ""}
+                ${mediaType === "movie" && runtimeDisplay ? `<span>•</span><span>${runtimeDisplay}</span>` : ""}
+                ${contentRating ? `<span>•</span><span class="border border-white/60 rounded px-0.5 py-0.5 text-xs leading-none font-bold">${contentRating}</span>` : ""}
               </div>
               <!-- Genres — displayed under title metadata -->
               ${title.genres.length > 0 ? `
@@ -354,7 +354,7 @@ export const GET: APIRoute = async ({ params, request }) => {
               ><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></button>
             </div>` : ""}
             <!-- Trailer button + Streaming providers -->
-            ${trailer || streamingProviders.length > 0 ? `<div class="mt-2 flex items-center gap-2">
+            ${trailer || streamingProviders.length > 0 ? `<div class="mt-2 flex flex-wrap items-center gap-2">
               ${trailer ? `<button
                 @click="$store.titleModal.trailerKey = '${trailer.key}'; $store.titleModal.showTrailer = true"
                 class="btn gap-2"
@@ -364,7 +364,7 @@ export const GET: APIRoute = async ({ params, request }) => {
                 </svg>
                 Watch Trailer
               </button>` : ""}
-              ${streamingProviders.length > 0 ? `<div class="ml-auto flex items-center gap-2">${streamingProviders.map(renderProvider).join("")}</div>` : ""}
+              ${streamingProviders.length > 0 ? `<div class="flex items-center gap-2">${streamingProviders.map(renderProvider).join("")}</div>` : ""}
             </div>` : ""}
             </div>
             <div class="flex-shrink-0">

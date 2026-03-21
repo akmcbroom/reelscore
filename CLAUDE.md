@@ -281,10 +281,10 @@ All filter state syncs to URL params and applies site-wide.
 Opened inline from any title card. Two-section layout:
 
 **Backdrop header overlay** — backdrop image with gradient, contains:
-- Title, year, content rating, runtime metadata row.
+- Metadata row: plain text with bullet separators — "TV Show • 2003 • TV-14" or "Movie • 1999 • 2h 19m • R". Runtime only shown for movies. Content rating uses a bordered badge (`border-white/60 font-bold`).
 - Genre badges (frosted glass style: `badge-secondary bg-white/10 backdrop-blur`).
 - Overview clamped to 3 lines. Newspaper icon (Lucide) opens a full overview modal.
-- Trailer button (opens YouTube embed modal) + streaming provider logos (right-aligned, vertically centered with trailer button).
+- Trailer button (opens YouTube embed modal) + streaming provider logos (inline, left-aligned).
 - **Streaming providers:** Deduplicated by base service name (strips channel suffixes like "Amazon Channel", "Apple TV Channel", "Roku Premium Channel", tier names like "Premium"/"Essential", and normalizes "Plus" → "+"). Capped at 6 max.
 - ReelScore pill (top-right of header).
 
