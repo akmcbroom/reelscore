@@ -474,6 +474,35 @@ export async function searchTitles(
   return response;
 }
 
+// --- Trending (Weekly) ---
+
+/**
+ * Fetches trending movies and TV shows for the week from TMDB.
+ * Unlike Discover (which uses TMDB's daily popularity metric),
+ * trending/week captures cultural moments — big premieres, viral
+ * hits, award buzz. Used to top the Discover grid so the most
+ * culturally relevant content appears first.
+ *
+ * Returns both movies and TV in one call with media_type included
+ * on each result (unlike Discover, which requires manual tagging).
+ * Shallow endpoint (~40 titles across 2 pages) — not suitable for
+ * deep pagination, only for seeding the top of the grid.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number (1-based, 20 results per page)
+ * @returns Paginated trending results with media_type included
+ */
+export async function getTrending(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  return tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/trending/all/week",
+    { page: String(page), region: "US" }
+  );
+}
+
 // --- Popular (Deep Pagination) ---
 
 /**
@@ -481,7 +510,8 @@ export async function searchTitles(
  * Uses the Discover endpoint with watch_region=US to ensure only
  * titles available in the US are returned. No language filter —
  * non-English hits with US distribution (Squid Game, Parasite, etc.)
- * should still appear. Has 500+ pages — ideal for infinite scroll.
+ * should still appear. vote_count.gte=10 filters zero-audience content.
+ * Has 500+ pages — ideal for infinite scroll.
  *
  * @param apiKey - TMDB API key
  * @param page - Page number (1-based, 20 results per page)
@@ -494,6 +524,7 @@ export async function getPopularMovies(
   // Discover endpoint with watch_region=US filters to titles
   // available on US streaming/theatrical. No language filter —
   // see CLAUDE.md "U.S. releases only" (region, not language).
+  // vote_count.gte=10 filters out zero-audience indie/obscure content.
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
     "/discover/movie",
@@ -501,6 +532,7 @@ export async function getPopularMovies(
       page: String(page),
       sort_by: "popularity.desc",
       watch_region: "US",
+      "vote_count.gte": "10",
     }
   );
 
@@ -518,7 +550,10 @@ export async function getPopularMovies(
 /**
  * Fetches popular TV shows from TMDB, filtered to US availability.
  * Uses the Discover endpoint with watch_region=US for proper region filtering.
+ * Excludes News (10763) and Talk (10767) genres — these are daily programs
+ * that inflate popularity but aren't discovery-worthy content for ReelScore.
  * No language filter — non-English hits with US distribution should appear.
+ * vote_count.gte=10 filters zero-audience content.
  * Has 500+ pages — ideal for deep pagination.
  *
  * @param apiKey - TMDB API key
@@ -532,6 +567,10 @@ export async function getPopularTV(
   // Discover endpoint with watch_region=US filters to shows
   // available on US platforms. No language filter —
   // see CLAUDE.md "U.S. releases only" (region, not language).
+  // without_genres excludes News (10763) and Talk (10767) — daily
+  // programs that dominate popularity rankings but aren't what
+  // ReelScore users are looking for.
+  // vote_count.gte=10 filters out zero-audience content.
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
     "/discover/tv",
@@ -539,6 +578,8 @@ export async function getPopularTV(
       page: String(page),
       sort_by: "popularity.desc",
       watch_region: "US",
+      without_genres: "10763|10767",
+      "vote_count.gte": "10",
     }
   );
 

@@ -168,9 +168,11 @@ export const GET: APIRoute = async ({ request }) => {
     ];
   } else {
     // "all" — 2 TMDB pages per type (80 total), blend and take top 60.
-    // index.astro consumes Popular pages 1–3 per type for the grid,
-    // so page 2 here starts at TMDB page 4 (offset by 3 instead of 1).
-    const tmdbStart = (page - 1) * 2 + 4;
+    // index.astro consumes Discover pages 1–3 per type for the grid
+    // (trending comes from a separate endpoint, doesn't affect offset).
+    // Feed page 2 starts at Discover page 4. Each feed page uses 2
+    // Discover pages per type, so offset = (page - 1) * 2 + 2.
+    const tmdbStart = (page - 1) * 2 + 2;
     const [m1, m2, t1, t2] = await Promise.all([
       getPopularMovies(apiKey, tmdbStart),
       getPopularMovies(apiKey, tmdbStart + 1),

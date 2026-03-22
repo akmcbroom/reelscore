@@ -37,7 +37,7 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 ### Stack Principles
 
 - **Astro v6 Cloudflare bindings.** Access D1, KV, and secrets via `import { env } from "cloudflare:workers"` — NOT `Astro.locals.runtime.env` (removed in Astro v6). The `cloudflare:workers` module is declared in `src/env.d.ts`.
-- **No build tooling beyond Astro.** No Webpack, no Vite plugins, no bundler config. Astro handles everything.
+- **No build tooling beyond Astro.** No Webpack, no custom bundler config. Astro (built on Vite) handles the build pipeline. Only add Vite plugins when required by the stack (e.g., `@tailwindcss/vite` for Tailwind v4).
 - **File-based routing.** Astro's `src/pages/` directory defines all routes. HTMX partials are served from `src/pages/api/` as Astro endpoints returning HTML fragments.
 - **Minimal Alpine.js.** Alpine handles client-side state only where HTMX can't (modals, dropdown toggles, local UI state). Don't reach for Alpine when HTMX `hx-swap` can do the job.
 - **Basecoat first.** Use Basecoat's class-based components (btn, card, badge, input, select, dialog, tabs, toast, skeleton, avatar, dropdown-menu, popover, etc.) before writing custom CSS. Reference: https://basecoatui.com
@@ -273,14 +273,16 @@ The thumbs on titles feed the **preference profile**, not individual title score
 - Uses TitleCard components (same as grid cards).
 - **SSR only** (rendered on page 1) — no HTMX pagination for rows.
 
-#### Blended Infinite Scroll Grid (Discover)
-- Below the curated row. Uses TMDB Discover endpoints (`/discover/movie` + `/discover/tv`) with `watch_region=US` and `sort_by=popularity.desc`. No language filter — non-English titles with US distribution (Squid Game, Parasite, etc.) appear naturally.
-- **Cross-deduplicated:** All TMDB IDs from the New Releases row (~20 IDs) are filtered out of the grid so no title appears twice on the page. Page 2+ grid requests accept an `exclude` param (comma-separated TMDB IDs).
+#### Blended Infinite Scroll Grid (Trending + Discover)
+- Below the curated row. Grid page 1 is **seeded with trending/week** items first (cultural moments — big premieres, viral hits, final seasons), then filled with TMDB Discover results sorted by popularity. Page 2+ is pure Discover. This ensures the top of the grid feels culturally relevant while Discover provides deep pagination for infinite scroll.
+- **Trending:** `getTrending()` fetches `/trending/all/week` (2 pages, ~40 items). Items appear in TMDB's trending order (not re-sorted). Filtered to movies/TV only (excludes "person" results). Anime is post-filtered: titles with `original_language === "ja"` AND Animation genre (16) are excluded — trending is a global signal and anime has disproportionate TMDB engagement worldwide, crowding out US-relevant content. Western animation (Pixar, Disney) and non-anime Japanese content pass through.
+- **Discover:** Uses TMDB Discover endpoints (`/discover/movie` + `/discover/tv`) with `watch_region=US` and `sort_by=popularity.desc`. No language filter — non-English titles with US distribution (Squid Game, Parasite, etc.) appear naturally. `vote_count.gte=10` filters zero-audience content. TV excludes News (10763) and Talk (10767) genres — daily programs that inflate popularity but aren't discovery-worthy.
+- **Cross-deduplicated:** All TMDB IDs from the New Releases row + grid page 1 (trending + discover) are filtered out of page 2+. Page 2+ grid requests accept an `exclude` param (comma-separated TMDB IDs).
 - **60 items per page** — the LCM of all grid column counts (2,3,4,5,6) so every row is always full at every responsive breakpoint. For "all" type: 2 TMDB pages per type (80 blended → top 60). For single type: 3 TMDB pages (60 items). All TMDB fetches run in parallel.
 - Capped at **10 pages** (600 titles) to prevent DOM bloat. Scroll sentinels use HTMX `intersect` trigger (IntersectionObserver-based) — NOT `revealed`, which fires on DOM insertion and causes runaway loading.
 
 #### SSR Page 1 Data Flow
-- Fetch New Releases row + grid page 1 **all in parallel** (8 TMDB calls total).
+- Fetch New Releases row + trending (2 pages) + grid page 1 **all in parallel** (10 TMDB calls total).
 - Score all items via a single `getScoresBatched` call (curated + grid combined).
 - Render: Scored for You row (if applicable) → New Releases row → grid with sentinel.
 
@@ -513,7 +515,8 @@ Even though everything is v1, build in this sequence so each layer has its found
 - Used for: title metadata, images, cast/crew, genres, streaming availability (watch providers), search, onboarding title lists (genre-aware via Discover), and Scored for You candidate sourcing (Discover with `with_genres` and `with_people`).
 - **NOT used for scores** — all scores come from MDbList.
 - Streaming availability data comes from TMDB's watch/providers endpoint — quality varies by region but is acceptable for U.S. content.
-- **Discover API** used for: New Releases curated row (movies with `region=US` + `release_date`, TV with `watch_region=US` + `first_air_date`), Popular grid (movies + TV with `watch_region=US`), Scored for You candidate pool (genre/actor/director queries), and onboarding title rating step (genre-aware selection). No language filter on any Discover call — non-English titles with US distribution appear naturally.
+- **Trending API** used for: seeding the top of the Discover grid with `/trending/all/week` (cultural moments, big premieres, viral hits). Shallow endpoint (~40 titles) — not for deep pagination.
+- **Discover API** used for: New Releases curated row (movies with `region=US` + `release_date`, TV with `watch_region=US` + `first_air_date`), Discover grid deep pagination (movies + TV with `watch_region=US`, `vote_count.gte=10`, TV excludes News/Talk genres), Scored for You candidate pool (genre/actor/director queries), and onboarding title rating step (genre-aware selection). No language filter on any Discover call — non-English titles with US distribution appear naturally.
 - **Not used for:** similar/related title recommendations (deferred).
 
 ---
