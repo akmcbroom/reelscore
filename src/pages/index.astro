@@ -46,7 +46,7 @@ const [popularMovies, nowPlaying, topRatedMovies, upcoming, popularTV, topRatedT
 
 // --- Blend all sources into a single grid ---
 // blendAndDedup: flatten → dedup by ID → anime filter → exclude → sort by popularity
-const gridItems = blendAndDedup(
+const allBlended = blendAndDedup(
   [
     popularMovies?.results ?? [],
     nowPlaying?.results ?? [],
@@ -58,7 +58,7 @@ const gridItems = blendAndDedup(
   new Set()
 );
 // 60 items = LCM(2,3,4,5,6) — fills complete rows at every breakpoint
-gridItems.length = Math.min(gridItems.length, 60);
+const gridItems = allBlended.slice(0, 60);
 
 // --- Score everything in one batch ---
 const scoreInputs = gridItems.map((item) => ({
@@ -80,8 +80,9 @@ const gridScored = gridItems.map((item, i) => {
 });
 
 // Build exclude list for page 2+ cross-dedup (comma-separated TMDB IDs).
-// All 60 grid IDs so nothing from page 1 reappears in infinite scroll.
-const excludeParam = gridItems.map((item) => item.id).join(",");
+// Excludes ALL blended IDs (not just the 60 shown) — items beyond the
+// cutoff could reappear from different sources on later TMDB pages.
+const excludeParam = allBlended.map((item) => item.id).join(",");
 ---
 
 <Layout title="Home">

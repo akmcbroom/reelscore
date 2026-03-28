@@ -532,6 +532,7 @@ export async function getPopularMovies(
       page: String(page),
       sort_by: "popularity.desc",
       watch_region: "US",
+      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
       "vote_count.gte": "10",
     }
   );
@@ -584,6 +585,7 @@ export async function getPopularTV(
       page: String(page),
       sort_by: "popularity.desc",
       watch_region: "US",
+      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
       without_genres: "10763|10767",
       "vote_count.gte": "50",
       "first_air_date.gte": dateFloor,
@@ -673,6 +675,7 @@ export async function getTopRatedMovies(
       page: String(page),
       sort_by: "vote_average.desc",
       watch_region: "US",
+      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
       "vote_count.gte": "300",
     }
   );
@@ -754,6 +757,7 @@ export async function getTopRatedTV(
       page: String(page),
       sort_by: "vote_average.desc",
       watch_region: "US",
+      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
       without_genres: "10763|10767",
       "vote_count.gte": "200",
     }

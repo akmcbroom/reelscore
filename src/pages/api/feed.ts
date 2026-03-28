@@ -165,7 +165,10 @@ export const GET: APIRoute = async ({ request }) => {
   // responsive breakpoint so there are never gaps in the grid.
   // Uses the same 6-source blend as index.astro. blendAndDedup handles
   // dedup, anime filtering, cross-dedup, and popularity sorting.
-  let items: TmdbTrendingItem[] = [];
+  // allBlended holds every deduplicated item from this page's sources.
+  // We show 60 but exclude ALL blended IDs — items beyond the cutoff
+  // could reappear from different sources on later TMDB pages.
+  let allBlended: TmdbTrendingItem[] = [];
 
   if (type === "movie") {
     // 4 movie sources, 1 page each (80 items → dedup → take 60)
@@ -177,7 +180,7 @@ export const GET: APIRoute = async ({ request }) => {
       getTopRatedMovies(apiKey, tmdbPage),
       getUpcomingMovies(apiKey, tmdbPage),
     ]);
-    items = blendAndDedup(
+    allBlended = blendAndDedup(
       [
         pm?.results ?? [],
         np?.results ?? [],
@@ -185,7 +188,7 @@ export const GET: APIRoute = async ({ request }) => {
         up?.results ?? [],
       ],
       excludeIds
-    ).slice(0, 60);
+    );
   } else if (type === "tv") {
     // 2 TV sources — need 3 pages each to reach ~120 items → take 60
     const tvStart = (page - 1) * 3 + 1;
@@ -197,7 +200,7 @@ export const GET: APIRoute = async ({ request }) => {
       getTopRatedTV(apiKey, tvStart + 1),
       getTopRatedTV(apiKey, tvStart + 2),
     ]);
-    items = blendAndDedup(
+    allBlended = blendAndDedup(
       [
         pt1?.results ?? [],
         pt2?.results ?? [],
@@ -207,7 +210,7 @@ export const GET: APIRoute = async ({ request }) => {
         tr3?.results ?? [],
       ],
       excludeIds
-    ).slice(0, 60);
+    );
   } else {
     // "all" — 6 sources, 1 page each (120 items → dedup → take 60)
     // Lockstep: feed page N = TMDB source page N.
@@ -221,7 +224,7 @@ export const GET: APIRoute = async ({ request }) => {
       getPopularTV(apiKey, tmdbPage),
       getTopRatedTV(apiKey, tmdbPage),
     ]);
-    items = blendAndDedup(
+    allBlended = blendAndDedup(
       [
         pm?.results ?? [],
         np?.results ?? [],
@@ -231,8 +234,11 @@ export const GET: APIRoute = async ({ request }) => {
         trt?.results ?? [],
       ],
       excludeIds
-    ).slice(0, 60);
+    );
   }
+
+  // Show 60 items but track all blended IDs for cross-page dedup
+  const items = allBlended.slice(0, 60);
 
   // Fetch scores in rate-limited batches
   const scoreInputs = items.map((item) => ({
@@ -271,10 +277,10 @@ export const GET: APIRoute = async ({ request }) => {
 
   const nextPage = page + 1;
   const typeParam = type !== "all" ? `&type=${type}` : "";
-  // Accumulate ALL previously-shown IDs for cross-page dedup.
-  // Page 1 IDs come from index.astro's exclude param. Each subsequent
-  // page appends its own IDs so the next page won't repeat them.
-  const currentPageIds = items.map((item) => item.id).join(",");
+  // Accumulate ALL blended IDs for cross-page dedup (not just the 60 shown).
+  // Items beyond the 60 cutoff could reappear from different TMDB sources
+  // on later pages — excluding all blended IDs prevents this.
+  const currentPageIds = allBlended.map((item) => item.id).join(",");
   const allExcludeIds = excludeParam
     ? `${excludeParam},${currentPageIds}`
     : currentPageIds;
