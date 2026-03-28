@@ -270,15 +270,15 @@ The thumbs on titles feed the **preference profile**, not individual title score
 - **Sources (Movies):**
   1. **Popular Movies** — `sort_by=popularity.desc`, `watch_region=US`, `vote_count.gte=10`.
   2. **Now Playing Movies** — `sort_by=popularity.desc`, `region=US`, `release_date` 45-day lookback to today, `vote_count.gte=10`.
-  3. **Top Rated Movies** — `sort_by=primary_release_date.desc`, `watch_region=US`, `vote_count.gte=300`.
+  3. **Top Rated Movies** — `sort_by=vote_average.desc`, `watch_region=US`, `vote_count.gte=300`.
   4. **Upcoming Movies** — `sort_by=popularity.desc`, `region=US`, `release_date` today to +30 days (no language filter — `region=US` handles it).
 - **Sources (TV):**
-  5. **Popular TV** — `sort_by=first_air_date.desc`, `watch_region=US`, `without_genres=10763|10767` (excludes News and Talk), `vote_count.gte=50`.
+  5. **Popular TV** — `sort_by=popularity.desc`, `watch_region=US`, `without_genres=10763|10767` (excludes News and Talk), `vote_count.gte=50`, `first_air_date.gte` 2-year lookback (excludes legacy shows like Grey's Anatomy).
   6. **Top Rated TV** — `sort_by=vote_average.desc`, `watch_region=US`, `without_genres=10763|10767` (excludes News and Talk), `vote_count.gte=200`.
 - **Anime filter (global):** Titles with `original_language === "ja"` AND Animation genre (16) are excluded from all sources. This prevents anime — which has disproportionate TMDB engagement worldwide — from crowding out US-relevant content. Western animation (Pixar, Disney) and non-anime Japanese content pass through.
 - **blendAndDedup pipeline:** Flatten all source results → deduplicate by TMDB ID → apply anime filter → exclude IDs from `exclude` param → sort by `popularity` descending.
 - **Pagination:** Lockstep — feed page N maps to TMDB source page N. For "all" type, all 6 sources fetch page N in parallel. For "movie" type, the 4 movie sources fetch page N. For "tv" type, the 2 TV sources fetch 3 pages each (to fill the 60-item target from fewer sources).
-- **Cross-deduplicated:** Page 1 TMDB IDs are passed as an `exclude` param (comma-separated) to page 2+.
+- **Cross-deduplicated:** All previously-shown TMDB IDs are accumulated in the `exclude` param (comma-separated) across pages — each page appends its own IDs before building the next sentinel URL.
 - **60 items per page** — the LCM of all grid column counts (2,3,4,5,6) so every row is always full at every responsive breakpoint. All TMDB fetches run in parallel.
 - Capped at **10 pages** (600 titles) to prevent DOM bloat. Scroll sentinels use HTMX `intersect` trigger (IntersectionObserver-based) — NOT `revealed`, which fires on DOM insertion and causes runaway loading.
 - No language filter on any Discover call — non-English titles with US distribution (Squid Game, Parasite, etc.) appear naturally.

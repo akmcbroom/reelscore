@@ -4,7 +4,7 @@
  * Query params:
  *   type: "movie" | "tv" | "all" (default: "all")
  *   page: page number (default: 1)
- *   exclude: comma-separated TMDB IDs to filter out (cross-dedup with page 1)
+ *   exclude: comma-separated TMDB IDs to filter out (accumulated across all previous pages)
  *
  * Uses the same 6-source blended approach as index.astro (page 1).
  * Pagination is lockstep for "all" type: feed page N = TMDB source page N.
@@ -124,8 +124,9 @@ export const GET: APIRoute = async ({ request }) => {
   const type = url.searchParams.get("type") ?? "all";
   const page = parseInt(url.searchParams.get("page") ?? "1", 10);
 
-  // Cross-dedup: page 1 TMDB IDs passed from index.astro so
-  // the grid never shows titles already visible on page 1.
+  // Cross-dedup: accumulated TMDB IDs from all previous pages.
+  // Grows each page — page 1 IDs from index.astro, plus each
+  // subsequent page's IDs appended by the sentinel URL.
   const excludeParam = url.searchParams.get("exclude") ?? "";
   const excludeIds = new Set(
     excludeParam
@@ -248,9 +249,14 @@ export const GET: APIRoute = async ({ request }) => {
 
   const nextPage = page + 1;
   const typeParam = type !== "all" ? `&type=${type}` : "";
-  // Pass page 1 exclude IDs through to all subsequent pages so
-  // cross-dedup persists across the entire infinite scroll session.
-  const excludeQueryParam = excludeParam ? `&exclude=${excludeParam}` : "";
+  // Accumulate ALL previously-shown IDs for cross-page dedup.
+  // Page 1 IDs come from index.astro's exclude param. Each subsequent
+  // page appends its own IDs so the next page won't repeat them.
+  const currentPageIds = items.map((item) => item.id).join(",");
+  const allExcludeIds = excludeParam
+    ? `${excludeParam},${currentPageIds}`
+    : currentPageIds;
+  const excludeQueryParam = `&exclude=${allExcludeIds}`;
   // Max page cap — prevents runaway DOM growth that degrades performance.
   // 10 pages × 60 cards = 600 titles, more than enough for discovery.
   const MAX_PAGES = 10;

@@ -548,10 +548,10 @@ export async function getPopularMovies(
 }
 
 /**
- * Fetches popular TV shows from TMDB, sorted by newest first.
- * Uses Discover with sort_by=first_air_date.desc so recently-premiered
- * shows appear first — this naturally deprioritizes long-running shows
- * like Grey's Anatomy (premiered 2005) in favor of newer content.
+ * Fetches popular TV shows from TMDB, sorted by popularity.
+ * Uses a 2-year premiere date floor (first_air_date.gte) to exclude
+ * legacy long-running shows like Grey's Anatomy (premiered 2005) while
+ * keeping popular recent shows like Daredevil Born Again (Jan 2025).
  * Excludes News (10763) and Talk (10767) genres — daily programs that
  * inflate popularity but aren't discovery-worthy for ReelScore.
  * vote_count.gte=50 filters low-audience content (higher bar than movies
@@ -560,26 +560,33 @@ export async function getPopularMovies(
  *
  * @param apiKey - TMDB API key
  * @param page - Page number (1-based, 20 results per page)
- * @returns Paginated popular TV shows with US availability, newest first
+ * @returns Paginated popular TV shows with US availability
  */
 export async function getPopularTV(
   apiKey: string,
   page = 1
 ): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  // first_air_date.desc surfaces newer shows first, deprioritizing
-  // long-running series that dominate popularity rankings.
+  // popularity.desc keeps genuinely popular shows ranked high.
+  // first_air_date.gte (2 years ago) filters out legacy shows that
+  // would otherwise dominate — Grey's Anatomy, Law & Order, etc.
+  // Top Rated TV (vote_average.desc) handles acclaimed older shows.
   // watch_region=US filters to US-available content.
   // without_genres excludes News (10763) and Talk (10767).
   // vote_count.gte=50 — higher bar than movies to filter TV junk.
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  const dateFloor = twoYearsAgo.toISOString().split("T")[0];
+
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
     "/discover/tv",
     {
       page: String(page),
-      sort_by: "first_air_date.desc",
+      sort_by: "popularity.desc",
       watch_region: "US",
       without_genres: "10763|10767",
       "vote_count.gte": "50",
+      "first_air_date.gte": dateFloor,
     }
   );
 
@@ -643,16 +650,17 @@ export async function getNowPlayingMovies(
 }
 
 /**
- * Fetches recent well-reviewed movies via Discover.
- * Sorted by primary_release_date.desc so the newest quality movies
- * appear first. vote_count.gte=300 ensures only movies with significant
- * audience engagement — filters out obscure/indie titles with inflated
- * averages from a handful of votes.
+ * Fetches top-rated movies via Discover, sorted by audience rating.
+ * vote_count.gte=300 ensures only movies with significant audience
+ * engagement — prevents obscure titles with perfect scores from a
+ * handful of votes from appearing.
  * watch_region=US filters to US-available content.
+ * Recent content is already covered by Popular Movies and Now Playing,
+ * so this source adds a quality signal (acclaimed films).
  *
  * @param apiKey - TMDB API key
  * @param page - Page number
- * @returns Paginated top-rated recent movies (US)
+ * @returns Paginated top-rated movies (US)
  */
 export async function getTopRatedMovies(
   apiKey: string,
@@ -663,7 +671,7 @@ export async function getTopRatedMovies(
     "/discover/movie",
     {
       page: String(page),
-      sort_by: "primary_release_date.desc",
+      sort_by: "vote_average.desc",
       watch_region: "US",
       "vote_count.gte": "300",
     }
