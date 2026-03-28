@@ -93,7 +93,6 @@ const excludeParam = gridItems.map((item) => item.id).join(",");
         so the feed API can continue filtering them out. */}
 
     <FeedSection
-      title="Discover"
       section="feed"
       loadMoreUrl={`/api/feed?page=2&exclude=${excludeParam}`}
     >

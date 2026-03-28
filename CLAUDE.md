@@ -306,10 +306,10 @@ All filter state syncs to URL params and applies site-wide.
 
 ### Title Card
 
-- **Score badge:** Perfectly round circle, centered, overlapping the top of the poster. Displays ReelScore (color-coded), clock icon (unreleased), or "—" (insufficient sources). Translucent `bg-black/40` background for no-score/unreleased titles. Thumbs up/down buttons are on the modal view, not the card.
-- **Unreleased titles:** If a title's release date is in the future, show a **clock icon** (Lucide `Clock` inline SVG) in the score badge instead of a score.
+- **Score lip:** Small gradient tab positioned top-right above the poster with concave SVG curves on both sides. The tab displays the ReelScore number, a clock icon (unreleased), or "—" (insufficient sources). Uses a vertical gradient per tier: green-500→green-800 (70+), amber-500→amber-800 (60–69), red-500→red-800 (0–59), neutral-600→neutral-800 (no score/unreleased). The poster has a matching `border-t-2` in the gradient's dark color for a seamless connection. SVG `linearGradient` IDs are namespaced per card (`grad-l-{tmdbId}`, `grad-r-{tmdbId}`) to avoid conflicts across 60+ cards. Thumbs up/down buttons are on the modal view, not the card.
+- **Unreleased titles:** If a title's release date is in the future, show a **clock icon** (Lucide `Clock` inline SVG, 14×14) in the score lip instead of a score.
 - **Below poster:** Title (single line, truncated with ellipsis).
-- **Below title:** Type badge (`badge-secondary` for both Movie and TV) + year.
+- **Below title:** Plain text metadata with bullet separator — "TV Show • 2025" or "Movie • 2026". Matches the modal metadata style.
 - **Poster overlay, bottom-right:** "..." menu button. Opens options overlaid along the right side of the poster, expanding upward: Refresh Score (auth only), Share, Hide.
 - **Refresh Score button behavior:** On click, icon swaps to spinner while fetching. On completion, icon swaps to a **lock icon** for the duration of the 15-minute cooldown. Lock conveys "recently refreshed, try later." After cooldown expires, reverts to refresh icon. If not logged in, clicking prompts sign-up/login.
 - **Watchlist button:** Visible to all users. If not logged in, clicking prompts sign-up/login.

@@ -56,31 +56,40 @@ function renderTitleCard(item: {
   const year = item.releaseDate
     ? new Date(item.releaseDate).getFullYear()
     : null;
-  const typeBadgeText = item.mediaType === "tv" ? "TV" : "Movie";
+  const typeBadgeText = item.mediaType === "tv" ? "TV Show" : "Movie";
 
-  // Score pill — clock icon for unreleased, score for released
-  let scoreColorClass = "bg-black/40 text-white/60";
+  // Score lip gradient tiers — light (top) and dark (bottom) hex for SVG gradients,
+  // plus Tailwind classes for the tab and poster border-top.
+  type Tier = { from: string; to: string; fromClass: string; toClass: string; borderClass: string; textColor: string };
+  const tiers: Record<string, Tier> = {
+    green: { from: "#22c55e", to: "#166534", fromClass: "from-green-500", toClass: "to-green-800", borderClass: "border-green-800", textColor: "text-black" },
+    gold:  { from: "#f59e0b", to: "#92400e", fromClass: "from-amber-500", toClass: "to-amber-800", borderClass: "border-amber-800", textColor: "text-black" },
+    red:   { from: "#ef4444", to: "#991b1b", fromClass: "from-red-500",   toClass: "to-red-800",   borderClass: "border-red-800",   textColor: "text-white" },
+    none:  { from: "#525252", to: "#262626", fromClass: "from-neutral-600", toClass: "to-neutral-800", borderClass: "border-neutral-800", textColor: "text-white/60" },
+  };
+
+  let tier: Tier;
+  if (item.isUnreleased || item.score === null) tier = tiers.none;
+  else if (item.score >= 70) tier = tiers.green;
+  else if (item.score >= 60) tier = tiers.gold;
+  else tier = tiers.red;
+
+  // Score display — number, clock icon (unreleased), or dash (no data)
   let scoreDisplay: string;
-  let scoreTitle: string;
-
   if (item.isUnreleased) {
-    // Lucide Clock icon SVG (16x16 to fit the pill)
-    scoreDisplay = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-    scoreTitle = "Not yet released";
+    scoreDisplay = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
   } else if (item.score !== null) {
     scoreDisplay = String(item.score);
-    // Color tiers: green (70+), gold/amber (60-69), red (0-59)
-    if (item.score >= 70) scoreColorClass = "bg-score-green text-black";
-    else if (item.score >= 60) scoreColorClass = "bg-score-gold text-black";
-    else scoreColorClass = "bg-score-red text-white";
-    scoreTitle = `ReelScore: ${item.score}`;
   } else {
     scoreDisplay = "—";
-    scoreTitle = "Not enough ratings";
   }
 
-  // Dev-only tooltip with source breakdown — mirrors ScoreBadge.astro behavior.
-  // import.meta.env.DEV is available in Astro API routes at build/dev time.
+  // Dev tooltip with source breakdown
+  let scoreTitle = item.isUnreleased
+    ? "Not yet released"
+    : item.score !== null
+      ? `ReelScore: ${item.score}`
+      : "Not enough ratings";
   if (import.meta.env.DEV && item.sources.length > 0) {
     const breakdown = item.sources
       .map((s) => `${getSourceLabel(s.source as AudienceSource)}: ${s.normalizedScore}`)
@@ -90,7 +99,11 @@ function renderTitleCard(item: {
       : `Insufficient sources (${item.sources.length}/2)\n${breakdown}`;
   }
 
-  // Lucide Video icon SVG for poster placeholder
+  // Unique SVG gradient IDs per card — prevents conflicts across 60+ cards
+  const gradL = `grad-l-${item.tmdbId}`;
+  const gradR = `grad-r-${item.tmdbId}`;
+
+  // Poster HTML — image or placeholder
   const posterHtml = posterUrl
     ? `<img src="${posterUrl}" alt="${item.title.replace(/"/g, "&quot;")}" loading="lazy" width="342" height="513" class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />`
     : `<div class="flex h-full w-full items-center justify-center text-white/20">
@@ -102,19 +115,28 @@ function renderTitleCard(item: {
 
   return `
     <div class="group relative flex flex-col cursor-pointer" data-tmdb-id="${item.tmdbId}" data-media-type="${item.mediaType}" @click="$store.titleModal.openTitle(${item.tmdbId}, '${item.mediaType}')">
-      <div class="relative overflow-hidden rounded-lg bg-surface-700 aspect-[2/3]">
-        ${posterHtml}
-        <div class="absolute -top-0 left-1/2 -translate-x-1/2 translate-y-2 z-10">
-          <span class="inline-flex items-center justify-center rounded-full font-bold tabular-nums text-sm w-9 h-9 ${scoreColorClass}"
-                title="${scoreTitle}">
-            ${scoreDisplay}
-          </span>
+      <div class="flex flex-col relative">
+        <div class="flex items-end self-end mr-2">
+          <svg class="overflow-visible h-3" viewBox="0 0 14 14">
+            <defs><linearGradient id="${gradL}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tier.from}"/><stop offset="100%" stop-color="${tier.to}"/></linearGradient></defs>
+            <path d="M14,0 Q14,14 0,14 L14,14 Z" fill="url(#${gradL})"/>
+          </svg>
+          <div class="flex items-center justify-center z-10 rounded-t-lg w-12 h-5 bg-gradient-to-b ${tier.fromClass} ${tier.toClass}" title="${scoreTitle}">
+            <span class="font-bold text-sm tabular-nums ${tier.textColor}">${scoreDisplay}</span>
+          </div>
+          <svg class="overflow-visible h-3" viewBox="0 0 14 14">
+            <defs><linearGradient id="${gradR}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tier.from}"/><stop offset="100%" stop-color="${tier.to}"/></linearGradient></defs>
+            <path d="M0,0 Q0,14 14,14 L0,14 Z" fill="url(#${gradR})"/>
+          </svg>
+        </div>
+        <div class="relative overflow-hidden bg-surface-700 aspect-[2/3] rounded-lg shadow-lg border-t-2 ${tier.borderClass}">
+          ${posterHtml}
         </div>
       </div>
       <h3 class="mt-2 text-sm font-medium text-white truncate leading-tight">${item.title.replace(/</g, "&lt;")}</h3>
-      <div class="mt-1 flex items-center gap-2 text-xs text-white/50">
-        <span class="badge-secondary text-[10px] px-1.5 py-0">${typeBadgeText}</span>
-        ${year ? `<span>${year}</span>` : ""}
+      <div class="mt-1 flex items-center gap-1 text-xs text-white/50">
+        <span>${typeBadgeText}</span>
+        ${year ? `<span>•</span><span>${year}</span>` : ""}
       </div>
     </div>`;
 }
