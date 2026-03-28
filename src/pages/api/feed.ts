@@ -4,26 +4,30 @@
  * Query params:
  *   type: "movie" | "tv" | "all" (default: "all")
  *   page: page number (default: 1)
- *   exclude: comma-separated TMDB IDs to filter out (cross-dedup with curated rows)
+ *   exclude: comma-separated TMDB IDs to filter out (cross-dedup with page 1)
  *
- * Grid page 1 is rendered server-side by index.astro (Popular pages 1–3
- * per type). Pages 2+ use this endpoint with TMDB Popular endpoints
- * offset to start at page 4 (avoiding overlap with page 1).
+ * Uses the same 6-source blended approach as index.astro (page 1).
+ * Pagination is lockstep for "all" type: feed page N = TMDB source page N.
+ * For "movie" type: 4 movie sources, 1 page each.
+ * For "tv" type: 2 TV sources, 3 pages each (to reach ~120 items).
  * Each feed page serves exactly 60 items — the LCM of all grid column
  * counts (2,3,4,5,6) — so every row is always full at every breakpoint.
- * For "all" type: 2 TMDB pages per type (80 blended → top 60).
- * For single type: 3 TMDB pages (60 items). All fetches run in parallel.
- * The exclude param filters out curated row TMDB IDs for cross-dedup.
+ * The exclude param filters out page 1 TMDB IDs for cross-dedup.
  *
  * Returns HTML fragments (TitleCard markup) for HTMX to swap into the page.
- * See CLAUDE.md Discovery Feeds.
+ * See CLAUDE.md Discovery Feed.
  */
 
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import {
   getPopularMovies,
+  getNowPlayingMovies,
+  getTopRatedMovies,
+  getUpcomingMovies,
   getPopularTV,
+  getTopRatedTV,
+  blendAndDedup,
   getDisplayTitle,
   getReleaseDate,
   getImageUrl,
@@ -120,8 +124,8 @@ export const GET: APIRoute = async ({ request }) => {
   const type = url.searchParams.get("type") ?? "all";
   const page = parseInt(url.searchParams.get("page") ?? "1", 10);
 
-  // Cross-dedup: curated row TMDB IDs passed from the home page so
-  // the grid never shows titles already visible in horizontal rows.
+  // Cross-dedup: page 1 TMDB IDs passed from index.astro so
+  // the grid never shows titles already visible on page 1.
   const excludeParam = url.searchParams.get("exclude") ?? "";
   const excludeIds = new Set(
     excludeParam
@@ -136,75 +140,76 @@ export const GET: APIRoute = async ({ request }) => {
 
   // 60 items per page = LCM(2,3,4,5,6) — fills complete rows at every
   // responsive breakpoint so there are never gaps in the grid.
-  // "all" fetches 2 TMDB pages per type (80 total, take 60).
-  // Single type fetches 3 TMDB pages (60 total).
-  // All fetches run in parallel so latency stays the same.
+  // Uses the same 6-source blend as index.astro. blendAndDedup handles
+  // dedup, anime filtering, cross-dedup, and popularity sorting.
   let items: TmdbTrendingItem[] = [];
 
   if (type === "movie") {
-    // 3 TMDB pages × 20 = 60 items
-    const tmdbStart = (page - 1) * 3 + 1;
-    const [d1, d2, d3] = await Promise.all([
-      getPopularMovies(apiKey, tmdbStart),
-      getPopularMovies(apiKey, tmdbStart + 1),
-      getPopularMovies(apiKey, tmdbStart + 2),
+    // 4 movie sources, 1 page each (80 items → dedup → take 60)
+    // Lockstep: feed page N = TMDB source page N
+    const tmdbPage = page;
+    const [pm, np, tr, up] = await Promise.all([
+      getPopularMovies(apiKey, tmdbPage),
+      getNowPlayingMovies(apiKey, tmdbPage),
+      getTopRatedMovies(apiKey, tmdbPage),
+      getUpcomingMovies(apiKey, tmdbPage),
     ]);
-    items = [
-      ...(d1?.results ?? []),
-      ...(d2?.results ?? []),
-      ...(d3?.results ?? []),
-    ];
+    items = blendAndDedup(
+      [
+        pm?.results ?? [],
+        np?.results ?? [],
+        tr?.results ?? [],
+        up?.results ?? [],
+      ],
+      excludeIds
+    ).slice(0, 60);
   } else if (type === "tv") {
-    const tmdbStart = (page - 1) * 3 + 1;
-    const [d1, d2, d3] = await Promise.all([
-      getPopularTV(apiKey, tmdbStart),
-      getPopularTV(apiKey, tmdbStart + 1),
-      getPopularTV(apiKey, tmdbStart + 2),
+    // 2 TV sources — need 3 pages each to reach ~120 items → take 60
+    const tvStart = (page - 1) * 3 + 1;
+    const [pt1, pt2, pt3, tr1, tr2, tr3] = await Promise.all([
+      getPopularTV(apiKey, tvStart),
+      getPopularTV(apiKey, tvStart + 1),
+      getPopularTV(apiKey, tvStart + 2),
+      getTopRatedTV(apiKey, tvStart),
+      getTopRatedTV(apiKey, tvStart + 1),
+      getTopRatedTV(apiKey, tvStart + 2),
     ]);
-    items = [
-      ...(d1?.results ?? []),
-      ...(d2?.results ?? []),
-      ...(d3?.results ?? []),
-    ];
+    items = blendAndDedup(
+      [
+        pt1?.results ?? [],
+        pt2?.results ?? [],
+        pt3?.results ?? [],
+        tr1?.results ?? [],
+        tr2?.results ?? [],
+        tr3?.results ?? [],
+      ],
+      excludeIds
+    ).slice(0, 60);
   } else {
-    // "all" — 2 TMDB pages per type (80 total), blend and take top 60.
-    // index.astro consumes Discover pages 1–3 per type for the grid
-    // (trending comes from a separate endpoint, doesn't affect offset).
-    // Feed page 2 starts at Discover page 4. Each feed page uses 2
-    // Discover pages per type, so offset = (page - 1) * 2 + 2.
-    const tmdbStart = (page - 1) * 2 + 2;
-    const [m1, m2, t1, t2] = await Promise.all([
-      getPopularMovies(apiKey, tmdbStart),
-      getPopularMovies(apiKey, tmdbStart + 1),
-      getPopularTV(apiKey, tmdbStart),
-      getPopularTV(apiKey, tmdbStart + 1),
+    // "all" — 6 sources, 1 page each (120 items → dedup → take 60)
+    // Lockstep: feed page N = TMDB source page N.
+    // index.astro uses page 1, so feed.ts page 2 = source page 2.
+    const tmdbPage = page;
+    const [pm, np, tr, up, pt, trt] = await Promise.all([
+      getPopularMovies(apiKey, tmdbPage),
+      getNowPlayingMovies(apiKey, tmdbPage),
+      getTopRatedMovies(apiKey, tmdbPage),
+      getUpcomingMovies(apiKey, tmdbPage),
+      getPopularTV(apiKey, tmdbPage),
+      getTopRatedTV(apiKey, tmdbPage),
     ]);
-
-    // Combine and deduplicate by TMDB ID (unlikely but defensive)
-    const seen = new Set<number>();
-    for (const result of [
-      ...(m1?.results ?? []),
-      ...(m2?.results ?? []),
-      ...(t1?.results ?? []),
-      ...(t2?.results ?? []),
-    ]) {
-      if (!seen.has(result.id)) {
-        seen.add(result.id);
-        items.push(result);
-      }
-    }
-
-    // Sort blended results by popularity descending so the feed feels cohesive
-    items.sort((a, b) => b.popularity - a.popularity);
+    items = blendAndDedup(
+      [
+        pm?.results ?? [],
+        np?.results ?? [],
+        tr?.results ?? [],
+        up?.results ?? [],
+        pt?.results ?? [],
+        trt?.results ?? [],
+      ],
+      excludeIds
+    ).slice(0, 60);
   }
-
-  // Filter out titles already shown in curated rows (cross-dedup)
-  if (excludeIds.size > 0) {
-    items = items.filter((item) => !excludeIds.has(item.id));
-  }
-
-  // Trim to exactly 60 for seamless grid rows at all breakpoints
-  items = items.slice(0, 60);
 
   // Fetch scores in rate-limited batches
   const scoreInputs = items.map((item) => ({
@@ -243,8 +248,8 @@ export const GET: APIRoute = async ({ request }) => {
 
   const nextPage = page + 1;
   const typeParam = type !== "all" ? `&type=${type}` : "";
-  // Pass exclude IDs through to all subsequent pages so cross-dedup
-  // persists across the entire infinite scroll session.
+  // Pass page 1 exclude IDs through to all subsequent pages so
+  // cross-dedup persists across the entire infinite scroll session.
   const excludeQueryParam = excludeParam ? `&exclude=${excludeParam}` : "";
   // Max page cap — prevents runaway DOM growth that degrades performance.
   // 10 pages × 60 cards = 600 titles, more than enough for discovery.

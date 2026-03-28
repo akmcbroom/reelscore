@@ -104,7 +104,7 @@ reelscore/
 │   │   ├── TitleCard.astro     # Media card (poster + score pill + actions)
 │   │   ├── TitleModal.astro    # Detail modal (rating, cast, trailer, etc.)
 │   │   ├── ScoreBadge.astro    # ReelScore pill with color coding
-│   │   ├── CuratedRow.astro    # Horizontal scrollable row (New Releases)
+│   │   ├── CuratedRow.astro    # Horizontal scrollable row (retained for future Scored for You)
 │   │   ├── StickyHeader.astro  # Search, filters, media type toggle, sort
 │   │   ├── FeedSection.astro   # Feed section (grid with infinite scroll)
 │   │   └── OnboardingStep.astro
@@ -259,32 +259,35 @@ The thumbs on titles feed the **preference profile**, not individual title score
 
 ### Discovery Feed (Home Page)
 
-**Hybrid layout** — one curated horizontal row at the top, blended infinite scroll grid below.
+**Single unified grid** — 6 TMDB Discover sources blended into one infinite scroll feed. No curated horizontal rows (CuratedRow component retained in codebase for future Scored for You row).
 
-#### Scored for You Row (logged-in only)
-- Appears at the very top of the page for logged-in users with `onboarding_completed = true`. See "Scored for You" Feed in Personalization System for full spec.
-- Users without completed onboarding see a CTA prompt instead.
+#### Scored for You Row (logged-in only, future)
+- Will appear at the very top of the page for logged-in users with `onboarding_completed = true`. See "Scored for You" Feed in Personalization System for full spec.
+- Users without completed onboarding will see a CTA prompt instead.
 
-#### New Releases Row
-- **1 curated row** below Scored for You (or at the top for anonymous users):
-  - **New Releases** — `getNewReleaseMovies()` + `getNewReleaseTV()` blended by popularity. Movies use TMDB Discover with `region=US` + `release_date` (45-day lookback, 7-day lookahead). TV uses Discover with `watch_region=US` + `first_air_date` (6-month lookback, 7-day lookahead — only genuinely new shows, not long-running series with recent episodes). Both use `vote_count.gte=10` to filter zero-audience content and `sort_by=popularity.desc`.
-- **20 titles**, horizontally scrollable (`flex overflow-x-auto scrollbar-hide`).
-- Scored via `getScoresBatched` (combined with grid items into a single batch call).
-- Uses TitleCard components (same as grid cards).
-- **SSR only** (rendered on page 1) — no HTMX pagination for rows.
-
-#### Blended Infinite Scroll Grid (Trending + Discover)
-- Below the curated row. Grid page 1 is **seeded with trending/week** items first (cultural moments — big premieres, viral hits, final seasons), then filled with TMDB Discover results sorted by popularity. Page 2+ is pure Discover. This ensures the top of the grid feels culturally relevant while Discover provides deep pagination for infinite scroll.
-- **Trending:** `getTrending()` fetches `/trending/all/week` (2 pages, ~40 items). Items appear in TMDB's trending order (not re-sorted). Filtered to movies/TV only (excludes "person" results). Anime is post-filtered: titles with `original_language === "ja"` AND Animation genre (16) are excluded — trending is a global signal and anime has disproportionate TMDB engagement worldwide, crowding out US-relevant content. Western animation (Pixar, Disney) and non-anime Japanese content pass through.
-- **Discover:** Uses TMDB Discover endpoints (`/discover/movie` + `/discover/tv`) with `watch_region=US` and `sort_by=popularity.desc`. No language filter — non-English titles with US distribution (Squid Game, Parasite, etc.) appear naturally. `vote_count.gte=10` filters zero-audience content. TV excludes News (10763) and Talk (10767) genres — daily programs that inflate popularity but aren't discovery-worthy.
-- **Cross-deduplicated:** All TMDB IDs from the New Releases row + grid page 1 (trending + discover) are filtered out of page 2+. Page 2+ grid requests accept an `exclude` param (comma-separated TMDB IDs).
-- **60 items per page** — the LCM of all grid column counts (2,3,4,5,6) so every row is always full at every responsive breakpoint. For "all" type: 2 TMDB pages per type (80 blended → top 60). For single type: 3 TMDB pages (60 items). All TMDB fetches run in parallel.
+#### Multi-Source Blended Grid
+- The grid blends **6 TMDB Discover sources** via a `blendAndDedup` helper that flattens all results, deduplicates by TMDB ID, applies the anime filter, excludes already-shown IDs, and sorts by popularity descending.
+- **Sources (Movies):**
+  1. **Popular Movies** — `sort_by=popularity.desc`, `watch_region=US`, `vote_count.gte=10`.
+  2. **Now Playing Movies** — `sort_by=popularity.desc`, `region=US`, `release_date` 45-day lookback to today, `vote_count.gte=10`.
+  3. **Top Rated Movies** — `sort_by=primary_release_date.desc`, `watch_region=US`, `vote_count.gte=300`.
+  4. **Upcoming Movies** — `sort_by=popularity.desc`, `region=US`, `release_date` today to +30 days (no language filter — `region=US` handles it).
+- **Sources (TV):**
+  5. **Popular TV** — `sort_by=first_air_date.desc`, `watch_region=US`, `without_genres=10763|10767` (excludes News and Talk), `vote_count.gte=50`.
+  6. **Top Rated TV** — `sort_by=vote_average.desc`, `watch_region=US`, `without_genres=10763|10767` (excludes News and Talk), `vote_count.gte=200`.
+- **Anime filter (global):** Titles with `original_language === "ja"` AND Animation genre (16) are excluded from all sources. This prevents anime — which has disproportionate TMDB engagement worldwide — from crowding out US-relevant content. Western animation (Pixar, Disney) and non-anime Japanese content pass through.
+- **blendAndDedup pipeline:** Flatten all source results → deduplicate by TMDB ID → apply anime filter → exclude IDs from `exclude` param → sort by `popularity` descending.
+- **Pagination:** Lockstep — feed page N maps to TMDB source page N. For "all" type, all 6 sources fetch page N in parallel. For "movie" type, the 4 movie sources fetch page N. For "tv" type, the 2 TV sources fetch 3 pages each (to fill the 60-item target from fewer sources).
+- **Cross-deduplicated:** Page 1 TMDB IDs are passed as an `exclude` param (comma-separated) to page 2+.
+- **60 items per page** — the LCM of all grid column counts (2,3,4,5,6) so every row is always full at every responsive breakpoint. All TMDB fetches run in parallel.
 - Capped at **10 pages** (600 titles) to prevent DOM bloat. Scroll sentinels use HTMX `intersect` trigger (IntersectionObserver-based) — NOT `revealed`, which fires on DOM insertion and causes runaway loading.
+- No language filter on any Discover call — non-English titles with US distribution (Squid Game, Parasite, etc.) appear naturally.
 
 #### SSR Page 1 Data Flow
-- Fetch New Releases row + trending (2 pages) + grid page 1 **all in parallel** (10 TMDB calls total).
-- Score all items via a single `getScoresBatched` call (curated + grid combined).
-- Render: Scored for You row (if applicable) → New Releases row → grid with sentinel.
+- Fetch all 6 Discover sources for page 1 **in parallel** (6 TMDB calls).
+- Blend via `blendAndDedup`, take top 60.
+- Score all items via a single `getScoresBatched` call.
+- Render: Scored for You row (if applicable, future) → grid with sentinel.
 
 #### General
 - All feeds are **URL-param driven**: active filters update URL, fully shareable/bookmarkable.
@@ -437,7 +440,7 @@ Notifications are detected **lazily**, not via background cron jobs:
 ## API Endpoints
 
 ### Public (no auth)
-- `GET /api/feed?type=movie|tv|all&page=X&exclude=id1,id2,...` — Blended grid feed (HTMX partial). Uses TMDB Discover endpoints (`watch_region=US`, no language filter) for deep pagination. Optional `exclude` param filters out TMDB IDs already shown in the New Releases row (cross-deduplication). Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
+- `GET /api/feed?type=movie|tv|all&page=X&exclude=id1,id2,...` — Multi-source blended grid feed (HTMX partial). Blends 6 TMDB Discover sources via `blendAndDedup` (Popular Movies, Now Playing, Top Rated Movies, Upcoming, Popular TV, Top Rated TV). Optional `exclude` param filters out TMDB IDs already shown on previous pages (cross-deduplication). Scores cached in KV (parallel read), uncached titles fetched from MDbList in rate-limited batches.
 - `GET /api/search?q=X&type=X&genre=X&page=X` — Search results (HTMX partial)
 - `GET /api/title/{tmdb_id}?type=movie|tv` — Title modal content (HTMX partial)
 - `GET /api/season/{tv_id}?season=N&show=ShowTitle` — Season episodes carousel (HTMX partial)
@@ -469,7 +472,7 @@ Even though everything is v1, build in this sequence so each layer has its found
 1. ~~**Project scaffold**~~ — Astro + Cloudflare adapter + Tailwind + Basecoat + Drizzle + D1/KV bindings. Deployed to Workers. **Done.**
 2. ~~**Score engine**~~ — MDbList API integration, score normalization, ReelScore calculation, KV caching, score refresh. `scoring.ts` and `mdblist.ts` with tests. **Done.**
 3. ~~**TMDB integration**~~ — Metadata fetching (title details, cast, genres, images, streaming availability), KV caching. `tmdb.ts` with full endpoint coverage. **Done.**
-4. ~~**Discovery feeds**~~ — Hybrid home page: New Releases curated row (Discover movies + TV, US-filtered, quality-filtered) at top, blended Discover grid below. Cross-deduplication between row and grid. Title cards. HTMX partials. URL-param filter state. **Done.**
+4. ~~**Discovery feeds**~~ — Multi-source blended grid: 6 TMDB Discover sources (Popular Movies, Now Playing, Top Rated Movies, Upcoming, Popular TV, Top Rated TV) blended via `blendAndDedup` helper. Global anime filter, cross-dedup between pages, lockstep pagination. Title cards. HTMX partials. URL-param filter state. **Done.**
 5. ~~**Title modal**~~ — Detail view with score, metadata, cast, genres, trailer, seasons/episodes. URL-param driven (`?title=X`). Alpine store state. **Done.**
 6. **Sticky header + Search** — StickyHeader.astro with search input, media type toggle, genre filter, sort options, streaming platform filter. Build `search.astro` page and `/api/search` endpoint. Wire all filter state to URL params.
 7. **Auth** — Build `db.ts` (Drizzle client factory) and `auth.ts` (Better Auth instance factory). Create database schema tables (users, preferences, ratings, watchlist, hidden titles, notifications). Login/signup pages, OAuth callback, `/api/auth/*` catch-all. Confirm auth works end-to-end before building personalization.
@@ -515,8 +518,8 @@ Even though everything is v1, build in this sequence so each layer has its found
 - Used for: title metadata, images, cast/crew, genres, streaming availability (watch providers), search, onboarding title lists (genre-aware via Discover), and Scored for You candidate sourcing (Discover with `with_genres` and `with_people`).
 - **NOT used for scores** — all scores come from MDbList.
 - Streaming availability data comes from TMDB's watch/providers endpoint — quality varies by region but is acceptable for U.S. content.
-- **Trending API** used for: seeding the top of the Discover grid with `/trending/all/week` (cultural moments, big premieres, viral hits). Shallow endpoint (~40 titles) — not for deep pagination.
-- **Discover API** used for: New Releases curated row (movies with `region=US` + `release_date`, TV with `watch_region=US` + `first_air_date`), Discover grid deep pagination (movies + TV with `watch_region=US`, `vote_count.gte=10`, TV excludes News/Talk genres), Scored for You candidate pool (genre/actor/director queries), and onboarding title rating step (genre-aware selection). No language filter on any Discover call — non-English titles with US distribution appear naturally.
+- **Discover API** used for: the main discovery grid (6 blended sources — Popular Movies, Now Playing Movies, Top Rated Movies, Upcoming Movies, Popular TV, Top Rated TV), Scored for You candidate pool (genre/actor/director queries), and onboarding title rating step (genre-aware selection). All sources use `watch_region=US` or `region=US` for US filtering. TV sources exclude News (10763) and Talk (10767) genres. No language filter on any Discover call — non-English titles with US distribution appear naturally.
+- **Trending API** no longer used in the main feed. May be reintroduced for specific features in the future.
 - **Not used for:** similar/related title recommendations (deferred).
 
 ---

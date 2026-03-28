@@ -548,38 +548,38 @@ export async function getPopularMovies(
 }
 
 /**
- * Fetches popular TV shows from TMDB, filtered to US availability.
- * Uses the Discover endpoint with watch_region=US for proper region filtering.
- * Excludes News (10763) and Talk (10767) genres — these are daily programs
- * that inflate popularity but aren't discovery-worthy content for ReelScore.
- * No language filter — non-English hits with US distribution should appear.
- * vote_count.gte=10 filters zero-audience content.
- * Has 500+ pages — ideal for deep pagination.
+ * Fetches popular TV shows from TMDB, sorted by newest first.
+ * Uses Discover with sort_by=first_air_date.desc so recently-premiered
+ * shows appear first — this naturally deprioritizes long-running shows
+ * like Grey's Anatomy (premiered 2005) in favor of newer content.
+ * Excludes News (10763) and Talk (10767) genres — daily programs that
+ * inflate popularity but aren't discovery-worthy for ReelScore.
+ * vote_count.gte=50 filters low-audience content (higher bar than movies
+ * because TV has more junk entries on TMDB).
+ * No language filter — non-English hits with US distribution appear.
  *
  * @param apiKey - TMDB API key
  * @param page - Page number (1-based, 20 results per page)
- * @returns Paginated popular TV shows with US availability
+ * @returns Paginated popular TV shows with US availability, newest first
  */
 export async function getPopularTV(
   apiKey: string,
   page = 1
 ): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
-  // Discover endpoint with watch_region=US filters to shows
-  // available on US platforms. No language filter —
-  // see CLAUDE.md "U.S. releases only" (region, not language).
-  // without_genres excludes News (10763) and Talk (10767) — daily
-  // programs that dominate popularity rankings but aren't what
-  // ReelScore users are looking for.
-  // vote_count.gte=10 filters out zero-audience content.
+  // first_air_date.desc surfaces newer shows first, deprioritizing
+  // long-running series that dominate popularity rankings.
+  // watch_region=US filters to US-available content.
+  // without_genres excludes News (10763) and Talk (10767).
+  // vote_count.gte=50 — higher bar than movies to filter TV junk.
   const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
     apiKey,
     "/discover/tv",
     {
       page: String(page),
-      sort_by: "popularity.desc",
+      sort_by: "first_air_date.desc",
       watch_region: "US",
       without_genres: "10763|10767",
-      "vote_count.gte": "10",
+      "vote_count.gte": "50",
     }
   );
 
@@ -594,19 +594,233 @@ export async function getPopularTV(
   return response;
 }
 
-// --- Curated Row Endpoints (Discover-based, US-filtered) ---
+// --- Multi-Source Discovery Endpoints ---
+// These 4 endpoints + getPopularMovies + getPopularTV form the 6-source
+// blended discovery feed. See CLAUDE.md Discovery Feed (Home Page).
 
 /**
- * Fetches new and upcoming movie releases in the US via Discover.
- * Uses region=US so release_date filters apply to US release dates
- * (foreign films with US distribution like Squid Game pass through).
- * 45-day lookback + 7-day lookahead covers recent + imminent releases.
- * vote_count.gte=10 filters out zero-audience content.
+ * Fetches movies currently in US theaters via Discover.
+ * Uses region=US so release_date filters apply to US release dates.
+ * 45-day lookback to today — no lookahead (Upcoming handles future).
+ * vote_count.gte=10 filters zero-audience content.
  * Sorted by popularity so mainstream titles surface first.
  *
  * @param apiKey - TMDB API key
  * @param page - Page number
- * @returns Paginated new release movies (US)
+ * @returns Paginated now-playing movies (US theaters)
+ */
+export async function getNowPlayingMovies(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const now = new Date();
+  const past = new Date(now);
+  past.setDate(past.getDate() - 45);
+  const dateGte = past.toISOString().split("T")[0];
+  const dateLte = now.toISOString().split("T")[0];
+
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/discover/movie",
+    {
+      page: String(page),
+      sort_by: "popularity.desc",
+      region: "US",
+      "release_date.gte": dateGte,
+      "release_date.lte": dateLte,
+      "vote_count.gte": "10",
+    }
+  );
+
+  if (!response) return null;
+
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "movie" as const,
+  }));
+
+  return response;
+}
+
+/**
+ * Fetches recent well-reviewed movies via Discover.
+ * Sorted by primary_release_date.desc so the newest quality movies
+ * appear first. vote_count.gte=300 ensures only movies with significant
+ * audience engagement — filters out obscure/indie titles with inflated
+ * averages from a handful of votes.
+ * watch_region=US filters to US-available content.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number
+ * @returns Paginated top-rated recent movies (US)
+ */
+export async function getTopRatedMovies(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/discover/movie",
+    {
+      page: String(page),
+      sort_by: "primary_release_date.desc",
+      watch_region: "US",
+      "vote_count.gte": "300",
+    }
+  );
+
+  if (!response) return null;
+
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "movie" as const,
+  }));
+
+  return response;
+}
+
+/**
+ * Fetches upcoming movies releasing in the US within the next 30 days.
+ * Uses region=US so release_date filters apply to US theatrical dates —
+ * no language filter needed since region already ensures US distribution.
+ * Sorted by popularity so the most anticipated releases surface first.
+ * Shallow endpoint (limited pages) — exhausts naturally at high page numbers.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number
+ * @returns Paginated upcoming movies (US, next 30 days)
+ */
+export async function getUpcomingMovies(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const now = new Date();
+  const future = new Date(now);
+  future.setDate(future.getDate() + 30);
+  const dateGte = now.toISOString().split("T")[0];
+  const dateLte = future.toISOString().split("T")[0];
+
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/discover/movie",
+    {
+      page: String(page),
+      sort_by: "popularity.desc",
+      region: "US",
+      "release_date.gte": dateGte,
+      "release_date.lte": dateLte,
+    }
+  );
+
+  if (!response) return null;
+
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "movie" as const,
+  }));
+
+  return response;
+}
+
+/**
+ * Fetches highly-rated TV shows via Discover.
+ * Sorted by vote_average.desc to surface the best-reviewed shows.
+ * vote_count.gte=200 ensures only well-established shows with
+ * significant audience engagement — prevents obscure titles with
+ * perfect scores from a handful of votes.
+ * Excludes News (10763) and Talk (10767) genres.
+ * watch_region=US filters to US-available content.
+ *
+ * @param apiKey - TMDB API key
+ * @param page - Page number
+ * @returns Paginated top-rated TV shows (US)
+ */
+export async function getTopRatedTV(
+  apiKey: string,
+  page = 1
+): Promise<TmdbPaginatedResponse<TmdbTrendingItem> | null> {
+  const response = await tmdbFetch<TmdbPaginatedResponse<TmdbTrendingItem>>(
+    apiKey,
+    "/discover/tv",
+    {
+      page: String(page),
+      sort_by: "vote_average.desc",
+      watch_region: "US",
+      without_genres: "10763|10767",
+      "vote_count.gte": "200",
+    }
+  );
+
+  if (!response) return null;
+
+  response.results = response.results.map((r) => ({
+    ...r,
+    media_type: "tv" as const,
+  }));
+
+  return response;
+}
+
+// --- Blend & Dedup Helper ---
+
+/** Animation genre ID on TMDB — used for anime filtering */
+const ANIMATION_GENRE_ID = 16;
+
+/**
+ * Blends multiple TMDB result arrays into a single deduplicated list.
+ * Shared by index.astro (page 1) and feed.ts (pages 2+) to ensure
+ * identical blending logic across all feed pages.
+ *
+ * Steps:
+ * 1. Flatten all source arrays into one pool
+ * 2. Deduplicate by TMDB ID (first occurrence wins)
+ * 3. Filter out anime (Japanese + Animation genre 16)
+ * 4. Filter out excluded IDs (cross-dedup from previous pages)
+ * 5. Sort by popularity descending
+ *
+ * @param sources - Arrays of TMDB items from different Discover queries
+ * @param excludeIds - Set of TMDB IDs to exclude (cross-page dedup)
+ * @returns Deduplicated, filtered, sorted array (caller takes first 60)
+ */
+export function blendAndDedup(
+  sources: TmdbTrendingItem[][],
+  excludeIds: Set<number>
+): TmdbTrendingItem[] {
+  const seen = new Set<number>();
+  const items: TmdbTrendingItem[] = [];
+
+  for (const source of sources) {
+    for (const item of source) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+
+      // Filter anime: Japanese language + Animation genre.
+      // Anime has disproportionate TMDB engagement globally, crowding
+      // out US-relevant content. Western animation (Pixar, Disney) and
+      // non-anime Japanese content pass through.
+      const isAnime =
+        item.original_language === "ja" &&
+        item.genre_ids?.includes(ANIMATION_GENRE_ID);
+      if (isAnime) continue;
+
+      // Cross-dedup: skip items already shown on previous pages
+      if (excludeIds.has(item.id)) continue;
+
+      items.push(item);
+    }
+  }
+
+  // Sort by popularity descending so the feed feels cohesive
+  items.sort((a, b) => b.popularity - a.popularity);
+
+  return items;
+}
+
+// --- Deprecated Endpoints (kept for potential future use) ---
+
+/**
+ * @deprecated Replaced by getNowPlayingMovies. Kept for potential
+ * future use in other features.
  */
 export async function getNewReleaseMovies(
   apiKey: string,
@@ -644,18 +858,8 @@ export async function getNewReleaseMovies(
 }
 
 /**
- * Fetches new and upcoming TV releases in the US via Discover.
- * Uses watch_region=US to filter to shows available on US platforms.
- * Uses first_air_date (series premiere date) instead of air_date so
- * only genuinely new shows appear — not long-running series like
- * Grey's Anatomy that just happen to have recent episodes.
- * 6-month lookback + 7-day lookahead covers recent premieres.
- * vote_count.gte=10 filters out zero-audience content.
- * Sorted by popularity so mainstream titles surface first.
- *
- * @param apiKey - TMDB API key
- * @param page - Page number
- * @returns Paginated newly-premiered TV shows (US)
+ * @deprecated Replaced by modified getPopularTV (first_air_date.desc).
+ * Kept for potential future use in other features.
  */
 export async function getNewReleaseTV(
   apiKey: string,

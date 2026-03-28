@@ -1,27 +1,27 @@
 ---
 /**
- * Home page — Hybrid discovery feed.
- * Top: New Releases curated row (Discover movies + TV, US-filtered).
- * Bottom: blended infinite scroll grid — trending/week items first
- * (cultural moments), then Discover popularity for deep pagination.
- * All data fetched in parallel, scored via single getScoresBatched call.
- * Grid is cross-deduplicated against curated row IDs.
+ * Home page — Multi-source blended discovery feed.
+ * Single unified grid blending 6 TMDB Discover sources:
+ *   Movies: Popular, Now Playing, Top Rated, Upcoming
+ *   TV: Popular (newest first), Top Rated
+ * All sources fetched in parallel, blended via blendAndDedup,
+ * scored via single getScoresBatched call.
  * See CLAUDE.md Discovery Feed (Home Page).
  */
 
 import Layout from "../layouts/Layout.astro";
 import TitleCard from "../components/TitleCard.astro";
-import CuratedRow from "../components/CuratedRow.astro";
 import FeedSection from "../components/FeedSection.astro";
 import {
-  getTrending,
   getPopularMovies,
+  getNowPlayingMovies,
+  getTopRatedMovies,
+  getUpcomingMovies,
   getPopularTV,
-  getNewReleaseMovies,
-  getNewReleaseTV,
+  getTopRatedTV,
+  blendAndDedup,
   getDisplayTitle,
   getReleaseDate,
-  type TmdbTrendingItem,
 } from "../lib/tmdb.ts";
 import { getScoresBatched } from "../lib/mdblist.ts";
 import { calculateReelScore } from "../lib/scoring.ts";
@@ -31,119 +31,37 @@ const apiKey = env.TMDB_API_KEY;
 const mdblistKey = env.MDBLIST_API_KEY;
 const kv = env.SCORE_CACHE;
 
-// --- Fetch all data in parallel ---
-// New Releases: Discover movies (region=US) + Discover TV (watch_region=US).
-// Trending: 2 pages of weekly trending (cultural moments) to seed grid top.
-//   2 pages = ~40 results. After anime filter + New Releases dedup, yields
-//   ~20-25 trending items at the top of the grid.
-// Discover: 3 TMDB pages per type (120 total) to fill the grid after trending.
-// All 10 calls run in parallel so latency is a single round-trip.
-const [
-  newMoviesData,
-  newTvData,
-  trendingPage1,
-  trendingPage2,
-  gridMovies1,
-  gridMovies2,
-  gridMovies3,
-  gridTv1,
-  gridTv2,
-  gridTv3,
-] = await Promise.all([
-  getNewReleaseMovies(apiKey, 1),
-  getNewReleaseTV(apiKey, 1),
-  getTrending(apiKey, 1),
-  getTrending(apiKey, 2),
-  getPopularMovies(apiKey, 1),
-  getPopularMovies(apiKey, 2),
-  getPopularMovies(apiKey, 3),
-  getPopularTV(apiKey, 1),
-  getPopularTV(apiKey, 2),
-  getPopularTV(apiKey, 3),
-]);
+// --- Fetch all 6 sources in parallel ---
+// 1 page from each source (6 TMDB calls, ~120 raw items).
+// After dedup + anime filter, take 60 for the grid.
+const [popularMovies, nowPlaying, topRatedMovies, upcoming, popularTV, topRatedTV] =
+  await Promise.all([
+    getPopularMovies(apiKey, 1),
+    getNowPlayingMovies(apiKey, 1),
+    getTopRatedMovies(apiKey, 1),
+    getUpcomingMovies(apiKey, 1),
+    getPopularTV(apiKey, 1),
+    getTopRatedTV(apiKey, 1),
+  ]);
 
-// --- Build New Releases row ---
-// Blend movies + TV, deduplicate by TMDB ID, sort by popularity, take 20.
-const newReleaseSeen = new Set<number>();
-const newReleaseItems: TmdbTrendingItem[] = [];
-for (const item of [
-  ...(newMoviesData?.results ?? []),
-  ...(newTvData?.results ?? []),
-]) {
-  if (!newReleaseSeen.has(item.id)) {
-    newReleaseSeen.add(item.id);
-    newReleaseItems.push(item);
-  }
-}
-newReleaseItems.sort((a, b) => b.popularity - a.popularity);
-const newReleases = newReleaseItems.slice(0, 20);
-
-// Track curated IDs so the grid below doesn't repeat them.
-const curatedIds = new Set<number>();
-for (const item of newReleases) curatedIds.add(item.id);
-
-// --- Build grid: trending first, then Discover ---
-// Trending/week items go first (preserving TMDB's trending order),
-// then Discover items sorted by popularity fill the rest.
-// Both are cross-deduplicated against the New Releases row.
-const gridSeen = new Set<number>();
-const gridItems: TmdbTrendingItem[] = [];
-
-// 1. Trending items first — preserve TMDB's trending order (don't re-sort).
-// Filter to movies and TV only (trending/all can include "person" results).
-// Exclude anime (Japanese animation) — trending is a global signal and anime
-// has disproportionate TMDB engagement worldwide, crowding out US-relevant
-// content. Targeted filter: original_language "ja" + Animation genre (16).
-// Western animation (Pixar, Disney) and non-anime Japanese content pass through.
-const ANIMATION_GENRE_ID = 16;
-const trendingResults = [
-  ...(trendingPage1?.results ?? []),
-  ...(trendingPage2?.results ?? []),
-];
-for (const result of trendingResults) {
-  const isAnime =
-    result.original_language === "ja" &&
-    result.genre_ids?.includes(ANIMATION_GENRE_ID);
-  if (
-    (result.media_type === "movie" || result.media_type === "tv") &&
-    !isAnime &&
-    !curatedIds.has(result.id) &&
-    !gridSeen.has(result.id)
-  ) {
-    gridSeen.add(result.id);
-    gridItems.push(result);
-  }
-}
-
-// 2. Discover items fill remaining slots — sorted by popularity.
-const discoverItems: TmdbTrendingItem[] = [];
-for (const result of [
-  ...(gridMovies1?.results ?? []),
-  ...(gridMovies2?.results ?? []),
-  ...(gridMovies3?.results ?? []),
-  ...(gridTv1?.results ?? []),
-  ...(gridTv2?.results ?? []),
-  ...(gridTv3?.results ?? []),
-]) {
-  // Skip titles already in curated rows, trending, or already seen
-  if (!curatedIds.has(result.id) && !gridSeen.has(result.id)) {
-    gridSeen.add(result.id);
-    discoverItems.push(result);
-  }
-}
-discoverItems.sort((a, b) => b.popularity - a.popularity);
-
-// Combine: trending (in trending order) + discover (in popularity order).
-// Take 60 total for seamless grid rows at all breakpoints.
-gridItems.push(...discoverItems);
+// --- Blend all sources into a single grid ---
+// blendAndDedup: flatten → dedup by ID → anime filter → exclude → sort by popularity
+const gridItems = blendAndDedup(
+  [
+    popularMovies?.results ?? [],
+    nowPlaying?.results ?? [],
+    topRatedMovies?.results ?? [],
+    upcoming?.results ?? [],
+    popularTV?.results ?? [],
+    topRatedTV?.results ?? [],
+  ],
+  new Set()
+);
+// 60 items = LCM(2,3,4,5,6) — fills complete rows at every breakpoint
 gridItems.length = Math.min(gridItems.length, 60);
 
 // --- Score everything in one batch ---
-// Combine curated + grid items for a single getScoresBatched call
-// to minimize MDbList API calls and maximize KV cache hits.
-const allItems = [...newReleases, ...gridItems];
-
-const scoreInputs = allItems.map((item) => ({
+const scoreInputs = gridItems.map((item) => ({
   tmdbId: item.id,
   mediaType: (item.media_type ?? "movie") as "movie" | "tv",
   releaseDate: getReleaseDate(item) ?? null,
@@ -151,8 +69,7 @@ const scoreInputs = allItems.map((item) => ({
 
 const allScoreData = await getScoresBatched(kv, mdblistKey, scoreInputs);
 
-// Map scores back to items
-const allScored = allItems.map((item, i) => {
+const gridScored = gridItems.map((item, i) => {
   const scoreData = allScoreData[i];
   const result = scoreData ? calculateReelScore(scoreData.scores) : null;
   return {
@@ -162,44 +79,17 @@ const allScored = allItems.map((item, i) => {
   };
 });
 
-// Split scored results back into curated row and grid
-const newReleasesScored = allScored.slice(0, newReleases.length);
-const gridScored = allScored.slice(newReleases.length);
-
 // Build exclude list for page 2+ cross-dedup (comma-separated TMDB IDs).
-// Includes curated row IDs + all grid page 1 IDs (trending + discover)
-// so nothing from page 1 reappears in the infinite scroll.
-const allPage1Ids = new Set([...curatedIds, ...gridItems.map((item) => item.id)]);
-const excludeParam = Array.from(allPage1Ids).join(",");
+// All 60 grid IDs so nothing from page 1 reappears in infinite scroll.
+const excludeParam = gridItems.map((item) => item.id).join(",");
 ---
 
 <Layout title="Home">
   <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
-    {/* --- Curated Horizontal Rows --- */}
-
-    {newReleasesScored.length > 0 && (
-      <CuratedRow title="New Releases">
-        {newReleasesScored.map(({ item, score, sources }) => (
-          <div class="flex-shrink-0 w-36 sm:w-40">
-            <TitleCard
-              tmdbId={item.id}
-              title={getDisplayTitle(item)}
-              posterPath={item.poster_path}
-              mediaType={(item.media_type ?? "movie") as "movie" | "tv"}
-              releaseDate={getReleaseDate(item)}
-              score={score}
-              sources={sources}
-              voteCount={item.vote_count}
-            />
-          </div>
-        ))}
-      </CuratedRow>
-    )}
-
-    {/* --- Blended Infinite Scroll Grid --- */}
-    {/* Cross-deduplicated: curated row IDs excluded from grid.
-        The exclude param passes curated IDs to page 2+ requests
+    {/* --- Multi-Source Blended Grid --- */}
+    {/* 6 Discover sources blended, deduped, anime-filtered, sorted by popularity.
+        The exclude param passes all page 1 IDs to page 2+ requests
         so the feed API can continue filtering them out. */}
 
     <FeedSection
