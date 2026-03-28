@@ -320,8 +320,9 @@ All filter state syncs to URL params and applies site-wide.
 Opened inline from any title card. Two-section layout:
 
 **Backdrop header overlay** — backdrop image (`aspect-video`) with gradient, contains:
-- **Close button** (top-left) and **ReelScore pill** (top-right, `size-20 text-xl`).
-- **Title logo:** TMDB logo art (English, white via `brightness-0 invert`) replaces the text title when available. Falls back to plain `<h2>` text if no logo exists. Logos cached in KV (7-day TTL).
+- **Score lip** (top-right, extending above the modal panel via `-mt-7`) — larger version of the card score lip (`w-16 h-7`, `text-xl`, SVG `h-4`). Same tier gradient + concave SVG curves. Backdrop gets `border-t-4` matching the tier's dark color.
+- **Close button** (top-right) — rounded `bg-black/50` pill with X icon.
+- **Title logo:** First English logo from TMDB's list, displayed in original colors (no invert — many logos have solid backgrounds that don't invert cleanly). Sized `min-h-12 max-h-22 w-auto max-w-44 object-left object-contain`. Falls back to plain `<h2>` text if no logo exists. Logos cached in KV (7-day TTL).
 - Metadata row: plain text with bullet separators — "TV Show • 2003 • TV-14" or "Movie • 1999 • 2h 19m • R". Runtime only shown for movies. Content rating uses a bordered badge (`border-white/60 font-bold`).
 - Genre badges (frosted glass style: `badge-secondary bg-white/10 backdrop-blur`).
 - Overview clamped to 2 lines. Clicking the clamped text opens a full overview modal.

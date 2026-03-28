@@ -353,10 +353,10 @@ export const GET: APIRoute = async ({ params, request }) => {
           }
           <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
 
-          <!-- Close button — top left -->
+          <!-- Close button — top right -->
           <button
             @click="$store.titleModal.close()"
-            class="absolute top-3 left-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
+            class="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
             aria-label="Close"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -373,7 +373,7 @@ export const GET: APIRoute = async ({ params, request }) => {
           <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
             <div class="max-w-md">
               ${logoUrl
-                ? `<img src="${logoUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="min-h-10 max-h-14 w-auto max-w-56 object-left brightness-0 invert" />`
+                ? `<img src="${logoUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="min-h-12 max-h-22 w-auto max-w-44 object-left object-contain" />`
                 : `<h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>`
               }
               <div class="mt-2 flex flex-wrap items-center gap-1 text-sm text-white/60">

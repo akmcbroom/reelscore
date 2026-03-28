@@ -1129,17 +1129,16 @@ export async function getLogos(
 }
 
 /**
- * Picks the best logo — most votes wins (most community-validated).
- * Ties broken by width descending (larger = sharper).
+ * Picks the best logo — returns the first logo in TMDB's list.
+ * TMDB orders by relevance/popularity. Displayed in original colors
+ * (no invert) since many logos have solid backgrounds that don't
+ * invert cleanly.
  *
  * @param logos - Array of logos from TMDB
- * @returns Best logo or null
+ * @returns First logo or null
  */
 export function getBestLogo(logos: TmdbLogo[]): TmdbLogo | null {
-  if (logos.length === 0) return null;
-  return [...logos].sort((a, b) =>
-    b.vote_count - a.vote_count || b.width - a.width
-  )[0];
+  return logos.length > 0 ? logos[0] : null;
 }
 
 /**
