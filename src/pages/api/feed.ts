@@ -296,7 +296,7 @@ export const GET: APIRoute = async ({ request }) => {
     ? `<div
         style="grid-column: 1 / -1; height: 1px;"
         hx-get="/api/feed?page=${nextPage}${typeParam}${excludeQueryParam}"
-        hx-trigger="intersect threshold:0.1"
+        hx-trigger="intersect threshold:0.1 once"
         hx-target="#grid-feed"
         hx-swap="beforeend"
       ></div>`

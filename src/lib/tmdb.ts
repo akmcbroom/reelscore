@@ -531,8 +531,11 @@ export async function getPopularMovies(
     {
       page: String(page),
       sort_by: "popularity.desc",
+      include_adult: "false",
       watch_region: "US",
-      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
+      with_watch_monetization_type: "flatrate|free|ads",
+      certification_country: "US",
+      "certification.lte": "R",
       "vote_count.gte": "10",
     }
   );
@@ -584,8 +587,10 @@ export async function getPopularTV(
     {
       page: String(page),
       sort_by: "popularity.desc",
+      include_adult: "false",
       watch_region: "US",
-      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
+      with_watch_monetization_type: "flatrate|free|ads",
+      certification_country: "US",
       without_genres: "10763|10767",
       "vote_count.gte": "50",
       "first_air_date.gte": dateFloor,
@@ -634,7 +639,10 @@ export async function getNowPlayingMovies(
     {
       page: String(page),
       sort_by: "popularity.desc",
+      include_adult: "false",
       region: "US",
+      certification_country: "US",
+      "certification.lte": "R",
       "release_date.gte": dateGte,
       "release_date.lte": dateLte,
       "vote_count.gte": "10",
@@ -674,8 +682,11 @@ export async function getTopRatedMovies(
     {
       page: String(page),
       sort_by: "vote_average.desc",
+      include_adult: "false",
       watch_region: "US",
-      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
+      with_watch_monetization_type: "flatrate|free|ads",
+      certification_country: "US",
+      "certification.lte": "R",
       "vote_count.gte": "300",
     }
   );
@@ -717,7 +728,10 @@ export async function getUpcomingMovies(
     {
       page: String(page),
       sort_by: "popularity.desc",
+      include_adult: "false",
       region: "US",
+      certification_country: "US",
+      "certification.lte": "R",
       "release_date.gte": dateGte,
       "release_date.lte": dateLte,
     }
@@ -756,8 +770,10 @@ export async function getTopRatedTV(
     {
       page: String(page),
       sort_by: "vote_average.desc",
+      include_adult: "false",
       watch_region: "US",
-      with_watch_monetization_type: "flatrate|free|ads|rent|buy",
+      with_watch_monetization_type: "flatrate|free|ads",
+      certification_country: "US",
       without_genres: "10763|10767",
       "vote_count.gte": "200",
     }

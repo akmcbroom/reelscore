@@ -42,7 +42,7 @@ const { title, section, loadMoreUrl } = Astro.props;
       <div
         style="grid-column: 1 / -1; height: 1px;"
         hx-get={loadMoreUrl}
-        hx-trigger="intersect threshold:0.1"
+        hx-trigger="intersect threshold:0.1 once"
         hx-target={`#grid-${section}`}
         hx-swap="beforeend"
       />
