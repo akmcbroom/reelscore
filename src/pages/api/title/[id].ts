@@ -43,34 +43,49 @@ import type { AudienceSource, NormalizedScore } from "../../../lib/mdblist.ts";
 
 // --- HTML Rendering Helpers ---
 
+/** Score tier colors — shared between the score lip and backdrop border. */
+type ScoreTier = { from: string; to: string; fromClass: string; toClass: string; borderClass: string; textColor: string };
+const SCORE_TIERS: Record<string, ScoreTier> = {
+  green: { from: "#22c55e", to: "#166534", fromClass: "from-green-500", toClass: "to-green-800", borderClass: "border-green-800", textColor: "text-white/90" },
+  gold:  { from: "#f59e0b", to: "#92400e", fromClass: "from-amber-500", toClass: "to-amber-800", borderClass: "border-amber-800", textColor: "text-white/90" },
+  red:   { from: "#ef4444", to: "#991b1b", fromClass: "from-red-500",   toClass: "to-red-800",   borderClass: "border-red-800",   textColor: "text-white/90" },
+  none:  { from: "#525252", to: "#262626", fromClass: "from-neutral-600", toClass: "to-neutral-800", borderClass: "border-neutral-800", textColor: "text-white/60" },
+};
+
+function getScoreTier(score: number | null, isUnreleased: boolean): ScoreTier {
+  if (isUnreleased || score === null) return SCORE_TIERS.none;
+  if (score >= 70) return SCORE_TIERS.green;
+  if (score >= 60) return SCORE_TIERS.gold;
+  return SCORE_TIERS.red;
+}
+
 /**
- * Renders the score badge HTML — same logic as ScoreBadge.astro and feed.ts
- * but as a raw string for the API endpoint.
+ * Renders the score lip HTML for the modal — gradient tab with concave SVG
+ * curves on both sides. Larger than the card version (w-16 h-7, text-xl).
+ * Mirrors TitleCard.astro score lip design.
  */
-function renderScoreBadge(
+function renderScoreLip(
   score: number | null,
   isUnreleased: boolean,
-  sources: NormalizedScore[]
+  sources: NormalizedScore[],
+  tmdbId: number
 ): string {
-  let colorClass = "bg-black/40 text-white/60";
-  let display: string;
-  let titleText: string;
+  const tier = getScoreTier(score, isUnreleased);
 
+  let display: string;
   if (isUnreleased) {
     display = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-    titleText = "Not yet released";
   } else if (score !== null) {
     display = String(score);
-    if (score >= 70) colorClass = "bg-score-green text-black";
-    else if (score >= 60) colorClass = "bg-score-gold text-black";
-    else colorClass = "bg-score-red text-white";
-    titleText = `ReelScore: ${score}`;
   } else {
     display = "—";
-    titleText = "Not enough ratings";
   }
 
-  // Dev-only source breakdown tooltip
+  let titleText = isUnreleased
+    ? "Not yet released"
+    : score !== null
+      ? `ReelScore: ${score}`
+      : "Not enough ratings";
   if (import.meta.env.DEV && sources.length > 0) {
     const breakdown = sources
       .map((s) => `${getSourceLabel(s.source as AudienceSource)}: ${s.normalizedScore}`)
@@ -80,7 +95,23 @@ function renderScoreBadge(
       : `Insufficient sources (${sources.length}/2)\n${breakdown}`;
   }
 
-  return `<span class="inline-flex items-center justify-center rounded-full font-bold tabular-nums text-xl size-20 ${colorClass}" title="${titleText}">${display}</span>`;
+  const gradL = `grad-ml-${tmdbId}`;
+  const gradR = `grad-mr-${tmdbId}`;
+
+  return `
+    <div class="flex items-end">
+      <svg class="overflow-visible h-4" viewBox="0 0 16 16">
+        <defs><linearGradient id="${gradL}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tier.from}"/><stop offset="100%" stop-color="${tier.to}"/></linearGradient></defs>
+        <path d="M16,0 Q16,16 0,16 L16,16 Z" fill="url(#${gradL})"/>
+      </svg>
+      <div class="flex items-center justify-center z-10 rounded-t-lg w-16 h-7 bg-gradient-to-b ${tier.fromClass} ${tier.toClass}" title="${titleText}">
+        <span class="font-mono font-bold text-xl tabular-nums ${tier.textColor}">${display}</span>
+      </div>
+      <svg class="overflow-visible h-4" viewBox="0 0 16 16">
+        <defs><linearGradient id="${gradR}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tier.from}"/><stop offset="100%" stop-color="${tier.to}"/></linearGradient></defs>
+        <path d="M0,0 Q0,16 16,16 L0,16 Z" fill="url(#${gradR})"/>
+      </svg>
+    </div>`;
 }
 
 /**
@@ -314,11 +345,11 @@ export const GET: APIRoute = async ({ params, request }) => {
     <div class="modal-content flex flex-col flex-1 min-h-0" data-tmdb-id="${tmdbId}" data-media-type="${mediaType}">
       <!-- Sticky header — backdrop + title info, stays fixed while body scrolls -->
       <div class="relative flex-shrink-0">
-        <!-- Backdrop image -->
-        <div class="relative h-full aspect-video overflow-hidden rounded-t-lg">
+        <!-- Backdrop image — no overflow-hidden so score lip can extend above -->
+        <div class="relative h-full aspect-video">
           ${backdropUrl
-            ? `<img src="${backdropUrl}" alt="" class="h-full w-full object-cover" />`
-            : `<div class="h-full w-full bg-surface-700"></div>`
+            ? `<img src="${backdropUrl}" alt="" class="h-full w-full object-cover rounded-t-lg border-t-4 ${getScoreTier(score, isUnreleased).borderClass}" />`
+            : `<div class="h-full w-full bg-surface-700 rounded-t-lg border-t-4 ${getScoreTier(score, isUnreleased).borderClass}"></div>`
           }
           <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
 
@@ -333,16 +364,16 @@ export const GET: APIRoute = async ({ params, request }) => {
             </svg>
           </button>
 
-          <!-- Score badge — top right -->
-          <div class="absolute top-3 right-3 z-20">
-            ${renderScoreBadge(score, isUnreleased, sources)}
+          <!-- Score lip — top right, pulled above modal edge with -mt-7 -->
+          <div class="absolute top-0 right-4 z-20 -mt-7">
+            ${renderScoreLip(score, isUnreleased, sources, tmdbId)}
           </div>
 
           <!-- Title info overlay on backdrop -->
           <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
             <div class="max-w-md">
               ${logoUrl
-                ? `<img src="${logoUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="h-10 sm:h-14 w-auto max-w-[75%] object-contain brightness-0 invert" />`
+                ? `<img src="${logoUrl}" alt="${title.title.replace(/"/g, "&quot;")}" class="min-h-10 max-h-14 w-auto max-w-56 object-left brightness-0 invert" />`
                 : `<h2 class="text-xl sm:text-2xl font-bold text-white leading-tight">${title.title.replace(/</g, "&lt;")}</h2>`
               }
               <div class="mt-2 flex flex-wrap items-center gap-1 text-sm text-white/60">

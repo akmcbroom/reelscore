@@ -2,13 +2,6 @@
 @import "basecoat-css";
 
 @theme {
-  /* ReelScore brand colors — score range palette.
-     Three tiers: red (0-59), gold/amber (60-69), green (70-100).
-     See CLAUDE.md Score Display Colors. */
-  --color-score-red: #ef4444;
-  --color-score-gold: #f59e0b;
-  --color-score-green: #22c55e;
-
   /* Dark theme surface colors */
   --color-surface-900: #0a0a0a;
   --color-surface-800: #141414;

@@ -1098,6 +1098,8 @@ export interface TmdbLogo {
   height: number;
   /** Community vote average — higher means better quality */
   vote_average: number;
+  /** Number of community votes — more votes = more validated */
+  vote_count: number;
 }
 
 /**
@@ -1127,17 +1129,16 @@ export async function getLogos(
 }
 
 /**
- * Picks the best logo — prefers higher vote average, then wider images
- * (wider logos tend to be horizontal title treatments that look best).
+ * Picks the best logo — most votes wins (most community-validated).
+ * Ties broken by width descending (larger = sharper).
  *
  * @param logos - Array of logos from TMDB
  * @returns Best logo or null
  */
 export function getBestLogo(logos: TmdbLogo[]): TmdbLogo | null {
   if (logos.length === 0) return null;
-  // Sort by vote average descending, then width descending
   return [...logos].sort((a, b) =>
-    b.vote_average - a.vote_average || b.width - a.width
+    b.vote_count - a.vote_count || b.width - a.width
   )[0];
 }
 

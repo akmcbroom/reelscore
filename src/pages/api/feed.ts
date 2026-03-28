@@ -62,9 +62,9 @@ function renderTitleCard(item: {
   // plus Tailwind classes for the tab and poster border-top.
   type Tier = { from: string; to: string; fromClass: string; toClass: string; borderClass: string; textColor: string };
   const tiers: Record<string, Tier> = {
-    green: { from: "#22c55e", to: "#166534", fromClass: "from-green-500", toClass: "to-green-800", borderClass: "border-green-800", textColor: "text-black" },
-    gold:  { from: "#f59e0b", to: "#92400e", fromClass: "from-amber-500", toClass: "to-amber-800", borderClass: "border-amber-800", textColor: "text-black" },
-    red:   { from: "#ef4444", to: "#991b1b", fromClass: "from-red-500",   toClass: "to-red-800",   borderClass: "border-red-800",   textColor: "text-white" },
+    green: { from: "#22c55e", to: "#166534", fromClass: "from-green-500", toClass: "to-green-800", borderClass: "border-green-800", textColor: "text-white/90" },
+    gold:  { from: "#f59e0b", to: "#92400e", fromClass: "from-amber-500", toClass: "to-amber-800", borderClass: "border-amber-800", textColor: "text-white/90" },
+    red:   { from: "#ef4444", to: "#991b1b", fromClass: "from-red-500",   toClass: "to-red-800",   borderClass: "border-red-800",   textColor: "text-white/90" },
     none:  { from: "#525252", to: "#262626", fromClass: "from-neutral-600", toClass: "to-neutral-800", borderClass: "border-neutral-800", textColor: "text-white/60" },
   };
 
@@ -122,7 +122,7 @@ function renderTitleCard(item: {
             <path d="M14,0 Q14,14 0,14 L14,14 Z" fill="url(#${gradL})"/>
           </svg>
           <div class="flex items-center justify-center z-10 rounded-t-lg w-12 h-5 bg-gradient-to-b ${tier.fromClass} ${tier.toClass}" title="${scoreTitle}">
-            <span class="font-bold text-sm tabular-nums ${tier.textColor}">${scoreDisplay}</span>
+            <span class="font-mono font-bold text-sm tabular-nums ${tier.textColor}">${scoreDisplay}</span>
           </div>
           <svg class="overflow-visible h-3" viewBox="0 0 14 14">
             <defs><linearGradient id="${gradR}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tier.from}"/><stop offset="100%" stop-color="${tier.to}"/></linearGradient></defs>

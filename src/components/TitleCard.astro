@@ -43,9 +43,9 @@ const isUnreleased = releaseDate ? new Date(releaseDate) > new Date() : false;
 // Used for both the Tailwind gradient on the tab and SVG linearGradient on the curves.
 type ScoreTier = { from: string; to: string; fromClass: string; toClass: string; borderClass: string; textColor: string };
 const scoreTiers: Record<string, ScoreTier> = {
-  green: { from: "#22c55e", to: "#166534", fromClass: "from-green-500", toClass: "to-green-800", borderClass: "border-green-800", textColor: "text-black" },
-  gold:  { from: "#f59e0b", to: "#92400e", fromClass: "from-amber-500", toClass: "to-amber-800", borderClass: "border-amber-800", textColor: "text-black" },
-  red:   { from: "#ef4444", to: "#991b1b", fromClass: "from-red-500",   toClass: "to-red-800",   borderClass: "border-red-800",   textColor: "text-white" },
+  green: { from: "#22c55e", to: "#166534", fromClass: "from-green-500", toClass: "to-green-800", borderClass: "border-green-800", textColor: "text-white/90" },
+  gold:  { from: "#f59e0b", to: "#92400e", fromClass: "from-amber-500", toClass: "to-amber-800", borderClass: "border-amber-800", textColor: "text-white/90" },
+  red:   { from: "#ef4444", to: "#991b1b", fromClass: "from-red-500",   toClass: "to-red-800",   borderClass: "border-red-800",   textColor: "text-white/90" },
   none:  { from: "#525252", to: "#262626", fromClass: "from-neutral-600", toClass: "to-neutral-800", borderClass: "border-neutral-800", textColor: "text-white/60" },
 };
 
@@ -103,7 +103,7 @@ if (isDev && sources.length > 0) {
         class:list={["flex items-center justify-center z-10 rounded-t-lg w-12 h-5 bg-gradient-to-b", tier.fromClass, tier.toClass]}
         title={scoreTitle}
       >
-        <span class:list={["font-bold text-sm tabular-nums", tier.textColor]}>
+        <span class:list={["font-mono font-bold text-sm tabular-nums", tier.textColor]}>
           {isUnreleased ? (
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" />
