@@ -175,12 +175,13 @@ function renderProvider(provider: TmdbWatchProvider): string {
  * Renders the full seasons section for TV shows as a horizontal season
  * pill selector with a lazy-loaded episode carousel below.
  *
- * Season pills scroll horizontally; clicking one loads that season's
- * episodes via HTMX into the carousel area below. Previously loaded
- * seasons are cached in Alpine state to avoid re-fetching.
+ * Season pills use HTMX hx-get/hx-target to swap episode content.
+ * The first season auto-loads via hx-trigger="load" on the carousel container.
+ * Active pill state is managed by the delegated click listener in Layout.astro.
  *
  * @param seasons - Array of season metadata from TMDB
  * @param tmdbId - TV show TMDB ID (needed for episode fetch URL)
+ * @param showTitle - Show title for display in episode detail modal
  */
 function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number, showTitle: string): string {
   // Filter out "Specials" (season 0)
@@ -190,7 +191,7 @@ function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number, showTitle: 
   const firstSeason = filteredSeasons[0].season_number;
   const encodedShowTitle = encodeURIComponent(showTitle);
 
-  // Skeleton placeholders matching episode card layout — shown while HTMX fetches
+  // Skeleton placeholders — shown while HTMX fetches the first season
   const skeletonCards = Array.from({ length: 4 }, () => `
     <div class="flex-shrink-0 w-40">
       <div class="skeleton aspect-video rounded-md"></div>
@@ -198,34 +199,34 @@ function renderSeasonsSection(seasons: TmdbSeason[], tmdbId: number, showTitle: 
       <div class="skeleton h-3.5 w-32 mt-1 rounded"></div>
     </div>`).join("");
 
-  // Season pill buttons — horizontal scroll
-  const seasonPills = filteredSeasons.map((s) => `
+  // Season pill buttons — first pill starts active.
+  // data-season-btn triggers active class update in the delegated click listener.
+  // hx-get/hx-target handle the episode fetch via HTMX.
+  const seasonPills = filteredSeasons.map((s, i) => `
     <button
-      class="flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors"
-      :class="selectedSeason === ${s.season_number} ? 'bg-white text-black' : 'bg-surface-600 text-white/60 hover:bg-surface-500 hover:text-white/80'"
-      @click="if (selectedSeason !== ${s.season_number}) { selectedSeason = ${s.season_number}; if (!loadedSeasons.includes(${s.season_number})) { loadedSeasons.push(${s.season_number}); htmx.ajax('GET', '/api/season/${tmdbId}?season=${s.season_number}&show=${encodedShowTitle}', { target: '#season-episodes-${tmdbId}-${s.season_number}', swap: 'innerHTML' }); } }"
+      class="flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${i === 0 ? "bg-white text-black" : "bg-surface-600 text-white/60 hover:bg-surface-500 hover:text-white/80"}"
+      data-season-btn="${s.season_number}"
+      hx-get="/api/season/${tmdbId}?season=${s.season_number}&show=${encodedShowTitle}"
+      hx-target="#season-episodes-${tmdbId}"
+      hx-swap="innerHTML"
     >${s.season_number}</button>`).join("");
 
-  // Episode containers — one per season, only the selected one is visible
-  const episodeContainers = filteredSeasons.map((s) => `
-    <div x-show="selectedSeason === ${s.season_number}" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
-      <div id="season-episodes-${tmdbId}-${s.season_number}">
-        <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-          ${skeletonCards}
-        </div>
-      </div>
-    </div>`).join("");
-
   return `
-    <div x-data="{ selectedSeason: ${firstSeason}, loadedSeasons: [${firstSeason}] }" x-init="htmx.ajax('GET', '/api/season/${tmdbId}?season=${firstSeason}&show=${encodedShowTitle}', { target: '#season-episodes-${tmdbId}-${firstSeason}', swap: 'innerHTML' })">
+    <div class="seasons-section">
       <h3 class="text-sm font-semibold text-white/80 mb-2">Seasons</h3>
       <!-- Season pill slider -->
       <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
         ${seasonPills}
       </div>
-      <!-- Episode carousel area -->
-      <div class="mt-2">
-        ${episodeContainers}
+      <!-- Episode carousel — hx-trigger="load" auto-fetches the first season
+           when this element is inserted into the DOM by HTMX -->
+      <div id="season-episodes-${tmdbId}" class="mt-2"
+           hx-get="/api/season/${tmdbId}?season=${firstSeason}&show=${encodedShowTitle}"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          ${skeletonCards}
+        </div>
       </div>
     </div>`;
 }
@@ -355,7 +356,7 @@ export const GET: APIRoute = async ({ params, request }) => {
 
           <!-- Close button — top right -->
           <button
-            @click="$store.titleModal.close()"
+            data-action="close-modal"
             class="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
             aria-label="Close"
           >
@@ -391,13 +392,15 @@ export const GET: APIRoute = async ({ params, request }) => {
             <!-- Overview — clamped to 2 lines, click to read full -->
             ${title.overview ? `<p
               class="mt-2 text-sm text-white/70 leading-tight text-pretty line-clamp-2 cursor-pointer hover:text-white/90 transition-colors"
-              @click="$store.titleModal.openOverview('${title.overview.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;")}')"
+              data-action="open-overview"
+              data-text="${title.overview.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"
               title="Click to read full overview"
             >${title.overview.replace(/</g, "&lt;")}</p>` : ""}
             <!-- Trailer button + Streaming providers -->
             ${trailer || streamingProviders.length > 0 ? `<div class="mt-2.5 flex flex-wrap items-center gap-2">
               ${trailer ? `<button
-                @click="$store.titleModal.trailerKey = '${trailer.key}'; $store.titleModal.showTrailer = true"
+                data-action="open-trailer"
+                data-key="${trailer.key}"
                 class="btn gap-2"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

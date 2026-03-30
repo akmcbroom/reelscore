@@ -16,71 +16,35 @@ const { title = "ReelScore" } = Astro.props;
     {/* Tailwind v4 CDN — dev only, enables live class testing in browser devtools */}
     {import.meta.env.DEV && <script is:inline src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>}
   </head>
-  <body class="min-h-screen bg-surface-900 text-white antialiased" x-data>
+  <body class="min-h-screen bg-surface-900 text-white antialiased">
     <slot />
 
-    <!-- Title Modal — Basecoat Dialog + Alpine.js state -->
-    <!-- Opens inline when a title card is clicked. Content loaded via HTMX. -->
+    <!-- Title Modal — native <dialog>, content loaded via HTMX -->
     <!-- URL-param driven: ?title=12345&type=movie — see CLAUDE.md Title Modal -->
-    <div
-      x-data
-      x-show="$store.titleModal.open"
-      x-transition:enter="transition ease-out duration-200"
-      x-transition:enter-start="opacity-0"
-      x-transition:enter-end="opacity-100"
-      x-transition:leave="transition ease-in duration-150"
-      x-transition:leave-start="opacity-100"
-      x-transition:leave-end="opacity-0"
-      @keydown.escape.window="$store.titleModal.close()"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10"
-      style="display: none;"
+    <dialog
+      id="title-modal"
+      class="p-4 sm:p-6 md:p-10"
+      onclick="if (event.target === this) window.titleModal.close()"
     >
-      <!-- Backdrop overlay -->
-      <div
-        class="fixed inset-0 bg-black/70"
-        @click="$store.titleModal.close()"
-      ></div>
-
-      <!-- Modal panel -->
-      <div
-        class="relative w-full max-w-2xl max-h-[calc(100vh-5rem)] flex flex-col rounded-lg bg-surface-800 shadow-2xl"
-        x-show="$store.titleModal.open"
-        x-transition:enter="transition ease-out duration-200"
-        x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-        x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-        x-transition:leave="transition ease-in duration-150"
-        x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-        x-transition:leave-end="opacity-0 scale-95 translate-y-4"
-        @click.stop
-      >
+      <div class="relative w-full max-w-2xl max-h-[calc(100vh-5rem)] flex flex-col rounded-lg bg-surface-800 shadow-2xl">
         <!-- HTMX loads title content here — flex child so inner content can scroll -->
         <div id="title-modal-content" class="flex flex-col flex-1 min-h-0">
-          <!-- Loading skeleton -->
+          <!-- Loading skeleton shown until HTMX swaps in the title content -->
           <div class="p-8 flex items-center justify-center">
             <div class="spinner"></div>
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
 
     <!-- Trailer Modal — YouTube embed overlay -->
-    <div
-      x-data
-      x-show="$store.titleModal.showTrailer"
-      x-transition:enter="transition ease-out duration-200"
-      x-transition:enter-start="opacity-0"
-      x-transition:enter-end="opacity-100"
-      x-transition:leave="transition ease-in duration-150"
-      x-transition:leave-start="opacity-100"
-      x-transition:leave-end="opacity-0"
-      @keydown.escape.window="$store.titleModal.showTrailer = false"
-      class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style="display: none;"
+    <dialog
+      id="trailer-modal"
+      onclick="if (event.target === this) window.titleModal.closeTrailer()"
     >
-      <div class="fixed inset-0 bg-black/90" @click="$store.titleModal.showTrailer = false"></div>
-      <div class="relative w-full max-w-4xl aspect-video" @click.stop>
+      <div class="relative w-full max-w-4xl aspect-video" onclick="event.stopPropagation()">
         <button
-          @click="$store.titleModal.showTrailer = false"
+          onclick="window.titleModal.closeTrailer()"
           class="absolute -top-10 right-0 text-white/70 hover:text-white"
           aria-label="Close trailer"
         >
@@ -88,36 +52,26 @@ const { title = "ReelScore" } = Astro.props;
             <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
           </svg>
         </button>
-        <template x-if="$store.titleModal.showTrailer && $store.titleModal.trailerKey">
-          <iframe
-            :src="`https://www.youtube.com/embed/${$store.titleModal.trailerKey}?autoplay=1&rel=0`"
-            class="w-full h-full rounded-lg"
-            frameborder="0"
-            allow="autoplay; encrypted-media"
-            allowfullscreen
-          ></iframe>
-        </template>
+        <!-- src is set/cleared programmatically to start/stop playback -->
+        <iframe
+          id="trailer-iframe"
+          class="w-full h-full rounded-lg"
+          frameborder="0"
+          allow="autoplay; encrypted-media"
+          allowfullscreen
+        ></iframe>
       </div>
-    </div>
+    </dialog>
 
     <!-- Overview Modal — full description overlay -->
-    <div
-      x-data
-      x-show="$store.titleModal.showOverview"
-      x-transition:enter="transition ease-out duration-200"
-      x-transition:enter-start="opacity-0"
-      x-transition:enter-end="opacity-100"
-      x-transition:leave="transition ease-in duration-150"
-      x-transition:leave-start="opacity-100"
-      x-transition:leave-end="opacity-0"
-      @keydown.escape.window="$store.titleModal.showOverview = false"
-      class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style="display: none;"
+    <dialog
+      id="overview-modal"
+      class="p-4"
+      onclick="if (event.target === this) this.close()"
     >
-      <div class="fixed inset-0 bg-black/80" @click="$store.titleModal.showOverview = false"></div>
-      <div class="relative w-full max-w-lg rounded-lg bg-surface-800 shadow-2xl p-6 max-h-[80vh] overflow-y-auto" @click.stop>
+      <div class="relative w-full max-w-lg rounded-lg bg-surface-800 shadow-2xl p-6 max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
         <button
-          @click="$store.titleModal.showOverview = false"
+          onclick="document.getElementById('overview-modal').close()"
           class="absolute top-3 right-3 text-white/50 hover:text-white transition-colors"
           aria-label="Close overview"
         >
@@ -126,35 +80,25 @@ const { title = "ReelScore" } = Astro.props;
           </svg>
         </button>
         <h3 class="text-lg font-semibold text-white mb-3">Overview</h3>
-        <p class="text-sm text-white/70 leading-relaxed" x-text="$store.titleModal.overviewText"></p>
+        <p id="overview-text" class="text-sm text-white/70 leading-relaxed"></p>
       </div>
-    </div>
+    </dialog>
 
-    <!-- Episode Detail Modal — mirrors main modal with still image background -->
-    <div
-      x-data
-      x-show="$store.titleModal.showEpisode"
-      x-transition:enter="transition ease-out duration-200"
-      x-transition:enter-start="opacity-0"
-      x-transition:enter-end="opacity-100"
-      x-transition:leave="transition ease-in duration-150"
-      x-transition:leave-start="opacity-100"
-      x-transition:leave-end="opacity-0"
-      @keydown.escape.window="$store.titleModal.showEpisode = false"
-      class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style="display: none;"
+    <!-- Episode Detail Modal — still image background + episode info -->
+    <dialog
+      id="episode-modal"
+      class="p-4"
+      onclick="if (event.target === this) this.close()"
     >
-      <div class="fixed inset-0 bg-black/80" @click="$store.titleModal.showEpisode = false"></div>
-      <div class="relative w-full max-w-lg rounded-lg bg-surface-800 shadow-2xl overflow-hidden" @click.stop>
+      <div class="relative w-full max-w-lg rounded-lg bg-surface-800 shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
         <!-- Still image background with gradient -->
         <div class="relative">
           <div class="h-48 sm:h-56 overflow-hidden">
-            <img :src="$store.titleModal.episode.stillUrl" alt="" class="h-full w-full object-cover" />
+            <img id="episode-still" src="" alt="" class="h-full w-full object-cover" />
             <div class="absolute inset-0 bg-gradient-to-t from-surface-800 via-surface-800/60 to-transparent"></div>
           </div>
-          <!-- Close button -->
           <button
-            @click="$store.titleModal.showEpisode = false"
+            onclick="document.getElementById('episode-modal').close()"
             class="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
             aria-label="Close"
           >
@@ -164,168 +108,202 @@ const { title = "ReelScore" } = Astro.props;
           </button>
           <!-- Episode info overlay -->
           <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
-            <p class="text-xs text-white/50" x-text="$store.titleModal.episode.showTitle"></p>
-            <h2 class="text-lg sm:text-xl font-bold text-white leading-tight mt-1" x-text="$store.titleModal.episode.title"></h2>
+            <p id="episode-show-title" class="text-xs text-white/50"></p>
+            <h2 id="episode-title" class="text-lg sm:text-xl font-bold text-white leading-tight mt-1"></h2>
             <div class="mt-1.5 flex flex-wrap items-center">
-              <span class="badge-secondary bg-white/10 backdrop-blur" x-text="$store.titleModal.episode.seasonEp"></span>
-              <span class="badge-secondary bg-transparent" x-text="$store.titleModal.episode.airDate"></span>
-              <span class="text-white/30" x-show="$store.titleModal.episode.runtime">&bull;</span>
-              <span class="badge-secondary bg-transparent" x-text="$store.titleModal.episode.runtime"></span>
+              <span id="episode-season-ep" class="badge-secondary bg-white/10 backdrop-blur"></span>
+              <span id="episode-air-date" class="badge-secondary bg-transparent"></span>
+              <span id="episode-runtime-dot" class="text-white/30 hidden">&bull;</span>
+              <span id="episode-runtime" class="badge-secondary bg-transparent"></span>
             </div>
           </div>
         </div>
         <!-- Description -->
         <div class="px-4 pb-4 sm:px-6 sm:pb-6">
-          <p class="text-sm text-white/70 leading-relaxed" x-text="$store.titleModal.episode.overview"></p>
+          <p id="episode-overview" class="text-sm text-white/70 leading-relaxed"></p>
         </div>
       </div>
-    </div>
+    </dialog>
 
     <script>
       import htmx from "htmx.org";
-      import Alpine from "alpinejs";
       import "basecoat-css/all";
 
-      // Expose htmx globally so Alpine store and HTMX-loaded content can access it
+      // Expose htmx globally so HTMX-loaded partials can access it
       (window as any).htmx = htmx;
 
       /**
-       * Alpine store for title modal state.
-       * Manages open/close, HTMX content loading, trailer overlay,
-       * and URL param sync (?title=X&type=Y).
+       * titleModal — vanilla JS modal controller.
+       * Replaces the old Alpine store with direct DOM manipulation.
+       * Manages open/close for the title, trailer, overview, and episode dialogs.
+       * URL param sync (?title=X&type=Y) for shareable/bookmarkable modal state.
        */
-      Alpine.store("titleModal", {
-        open: false,
-        tmdbId: null as number | null,
-        mediaType: "movie" as "movie" | "tv",
-        trailerKey: "" as string,
-        showTrailer: false,
-        showOverview: false,
-        showEpisode: false,
-
-        /** Full overview text — displayed in the overview modal */
-        overviewText: "" as string,
-
-        /** Episode detail modal state — populated by openEpisode() */
-        episode: {
-          stillUrl: "",
-          showTitle: "",
-          title: "",
-          seasonEp: "",
-          airDate: "",
-          runtime: "",
-          overview: "",
-        },
-
+      const titleModal = {
         /**
-         * Opens the modal for a given title. Updates URL params and
-         * triggers HTMX to fetch the modal content.
+         * Opens the title modal for a given TMDB ID.
+         * Resets content to loading state, fetches via HTMX, updates URL.
          */
         openTitle(tmdbId: number, mediaType: string) {
-          this.tmdbId = tmdbId;
-          this.mediaType = mediaType as "movie" | "tv";
-          this.open = true;
-          this.showTrailer = false;
-          this.showOverview = false;
-          this.showEpisode = false;
-          this.trailerKey = "";
-          this.overviewText = "";
-
-          // Update URL for shareability/bookmarking — see CLAUDE.md Title Modal
           const url = new URL(window.location.href);
           url.searchParams.set("title", String(tmdbId));
           url.searchParams.set("type", mediaType);
           history.pushState(null, "", url.toString());
 
-          // Reset modal content to loading state
+          // Reset to loading skeleton while HTMX fetches the title content
           const container = document.getElementById("title-modal-content");
           if (container) {
             container.innerHTML = `<div class="p-8 flex items-center justify-center"><div class="spinner"></div></div>`;
           }
 
-          // Use HTMX to fetch the title content
-          const htmx = (window as any).htmx;
-          if (htmx && container) {
-            htmx.ajax("GET", `/api/title/${tmdbId}?type=${mediaType}`, {
+          const htmxInst = (window as any).htmx;
+          if (htmxInst && container) {
+            htmxInst.ajax("GET", `/api/title/${tmdbId}?type=${mediaType}`, {
               target: "#title-modal-content",
               swap: "innerHTML",
             });
           }
 
-          // Prevent body scroll while modal is open
-          document.body.style.overflow = "hidden";
+          const dialog = document.getElementById("title-modal") as HTMLDialogElement;
+          if (dialog && !dialog.open) {
+            dialog.showModal();
+            document.body.style.overflow = "hidden";
+          }
         },
 
-        /**
-         * Closes the modal and cleans up URL params.
-         */
+        /** Closes the title modal. The 'close' event handler restores scroll + URL. */
         close() {
-          this.open = false;
-          this.showTrailer = false;
-          this.showOverview = false;
-          this.showEpisode = false;
-          this.trailerKey = "";
-          this.overviewText = "";
+          const dialog = document.getElementById("title-modal") as HTMLDialogElement;
+          if (dialog?.open) dialog.close();
+        },
 
-          // Remove title/type params from URL
-          const url = new URL(window.location.href);
+        /** Opens the trailer modal. Sets iframe src to start autoplay. */
+        openTrailer(key: string) {
+          const iframe = document.getElementById("trailer-iframe") as HTMLIFrameElement;
+          if (iframe) iframe.src = `https://www.youtube.com/embed/${key}?autoplay=1&rel=0`;
+          const dialog = document.getElementById("trailer-modal") as HTMLDialogElement;
+          dialog?.showModal();
+        },
+
+        /** Closes the trailer modal and clears iframe src to stop playback. */
+        closeTrailer() {
+          const dialog = document.getElementById("trailer-modal") as HTMLDialogElement;
+          dialog?.close();
+          const iframe = document.getElementById("trailer-iframe") as HTMLIFrameElement;
+          if (iframe) iframe.src = "";
+        },
+
+        /** Opens the full overview modal with the given text. */
+        openOverview(text: string) {
+          const el = document.getElementById("overview-text");
+          if (el) el.textContent = text;
+          const dialog = document.getElementById("overview-modal") as HTMLDialogElement;
+          dialog?.showModal();
+        },
+
+        /** Opens the episode detail modal, populating all fields from episode data. */
+        openEpisode(data: {
+          stillUrl: string; showTitle: string; title: string;
+          seasonEp: string; airDate: string; runtime: string; overview: string;
+        }) {
+          const still = document.getElementById("episode-still") as HTMLImageElement;
+          if (still) still.src = data.stillUrl;
+          (document.getElementById("episode-show-title") as HTMLElement).textContent = data.showTitle;
+          (document.getElementById("episode-title") as HTMLElement).textContent = data.title;
+          (document.getElementById("episode-season-ep") as HTMLElement).textContent = data.seasonEp;
+          (document.getElementById("episode-air-date") as HTMLElement).textContent = data.airDate;
+          (document.getElementById("episode-runtime") as HTMLElement).textContent = data.runtime;
+          (document.getElementById("episode-runtime-dot") as HTMLElement).classList.toggle("hidden", !data.runtime);
+          (document.getElementById("episode-overview") as HTMLElement).textContent = data.overview;
+          const dialog = document.getElementById("episode-modal") as HTMLDialogElement;
+          dialog?.showModal();
+        },
+      };
+
+      // Expose globally so inline onclick handlers on dialog elements can call it
+      (window as any).titleModal = titleModal;
+
+      /**
+       * Single delegated click listener — handles all interactive elements.
+       * Works for both static and HTMX-loaded content without re-initialization.
+       *
+       * Dispatch order:
+       *   1. data-action="close-modal"    — close title modal
+       *   2. data-action="open-overview"  — open overview (data-text)
+       *   3. data-action="open-trailer"   — open trailer (data-key)
+       *   4. data-action="open-episode"   — open episode modal (data-episode JSON)
+       *   5. [data-season-btn]            — update active season pill
+       *   6. [data-tmdb-id] outside dialog — open title modal
+       */
+      document.addEventListener("click", (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+
+        // data-action dispatch
+        const actionEl = target.closest("[data-action]") as HTMLElement | null;
+        if (actionEl) {
+          const action = actionEl.dataset.action;
+          if (action === "close-modal") titleModal.close();
+          else if (action === "open-overview") titleModal.openOverview(actionEl.dataset.text ?? "");
+          else if (action === "open-trailer") titleModal.openTrailer(actionEl.dataset.key ?? "");
+          else if (action === "open-episode") {
+            try { titleModal.openEpisode(JSON.parse(actionEl.dataset.episode ?? "{}")); } catch {}
+          }
+          return;
+        }
+
+        // Season pill — update active class; HTMX handles the server fetch
+        const seasonBtn = target.closest("[data-season-btn]") as HTMLElement | null;
+        if (seasonBtn) {
+          const section = seasonBtn.closest(".seasons-section");
+          section?.querySelectorAll<HTMLElement>("[data-season-btn]").forEach((btn) => {
+            btn.className = "flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors bg-surface-600 text-white/60 hover:bg-surface-500 hover:text-white/80";
+          });
+          seasonBtn.className = "flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors bg-white text-black";
+          return;
+        }
+
+        // Title card — any element with data-tmdb-id that is NOT inside a dialog
+        const card = target.closest("[data-tmdb-id]") as HTMLElement | null;
+        if (card && !card.closest("dialog")) {
+          const id = parseInt(card.dataset.tmdbId ?? "", 10);
+          const type = card.dataset.mediaType ?? "movie";
+          if (!isNaN(id)) titleModal.openTitle(id, type);
+        }
+      });
+
+      // Restore body scroll and clean URL when title modal closes (Escape key too)
+      document.getElementById("title-modal")?.addEventListener("close", () => {
+        document.body.style.overflow = "";
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("title")) {
           url.searchParams.delete("title");
           url.searchParams.delete("type");
           history.pushState(null, "", url.toString());
-
-          // Restore body scroll
-          document.body.style.overflow = "";
-        },
-
-        /**
-         * Opens the full overview modal with the given text.
-         */
-        openOverview(text: string) {
-          this.overviewText = text;
-          this.showOverview = true;
-        },
-
-        /**
-         * Opens the episode detail modal with the given episode data.
-         */
-        openEpisode(data: { stillUrl: string; showTitle: string; title: string; seasonEp: string; airDate: string; runtime: string; overview: string }) {
-          this.episode = data;
-          this.showEpisode = true;
-        },
+        }
       });
 
-      Alpine.start();
-
-      // Re-initialize Alpine on HTMX-loaded content so @click directives work
-      // on dynamically loaded title cards and modal content.
-      document.body.addEventListener("htmx:afterSwap", (event: any) => {
-        Alpine.initTree(event.detail.target);
+      // Clear trailer iframe on close to stop video playback
+      document.getElementById("trailer-modal")?.addEventListener("close", () => {
+        const iframe = document.getElementById("trailer-iframe") as HTMLIFrameElement;
+        if (iframe) iframe.src = "";
       });
 
-      // Check URL params on page load — open modal if ?title=X is present.
-      // This makes the modal URL-shareable and bookmarkable.
+      // Check URL params on page load — open modal if ?title=X is present
       document.addEventListener("DOMContentLoaded", () => {
         const params = new URLSearchParams(window.location.search);
         const titleId = params.get("title");
         const type = params.get("type") ?? "movie";
-        if (titleId) {
-          const store = Alpine.store("titleModal") as any;
-          store.openTitle(parseInt(titleId, 10), type);
-        }
+        if (titleId) titleModal.openTitle(parseInt(titleId, 10), type);
       });
 
-      // Handle browser back/forward — close or open modal based on URL params
+      // Handle browser back/forward — restore modal state from URL
       window.addEventListener("popstate", () => {
         const params = new URLSearchParams(window.location.search);
         const titleId = params.get("title");
-        const store = Alpine.store("titleModal") as any;
+        const dialog = document.getElementById("title-modal") as HTMLDialogElement;
         if (titleId) {
-          const type = params.get("type") ?? "movie";
-          store.openTitle(parseInt(titleId, 10), type);
-        } else if (store.open) {
-          store.open = false;
-          store.showTrailer = false;
-          document.body.style.overflow = "";
+          titleModal.openTitle(parseInt(titleId, 10), params.get("type") ?? "movie");
+        } else if (dialog?.open) {
+          dialog.close();
         }
       });
     </script>

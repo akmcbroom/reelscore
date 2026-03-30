@@ -24,9 +24,9 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 
 | Layer         | Technology                                         |
 | ------------- | -------------------------------------------------- |
-| Framework     | Astro (SSR via `@astrojs/cloudflare` adapter)      |
+| Framework     | Astro 6.1 (SSR via `@astrojs/cloudflare` adapter)  |
 | Styling       | Tailwind CSS v4                                    |
-| UI Components | Basecoat (basecoat-css) + HTMX + Alpine.js         |
+| UI Components | Basecoat (basecoat-css) + HTMX + vanilla JS        |
 | Icons         | Lucide (inline SVGs from lucide.dev — NOT `lucide-astro`) |
 | Auth          | Better Auth (native D1 support, `better-auth-cloudflare`) |
 | Database      | Cloudflare D1 (SQLite) via Drizzle ORM             |
@@ -34,13 +34,25 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 | Deployment    | Cloudflare Workers                                 |
 | External APIs | MDbList API (scores), TMDB API (metadata, images, streaming availability) |
 
+### Astro Conventions
+
+Astro is a file-based, component-oriented framework. Key conventions enforced in this project:
+
+- **`src/pages/`** defines all routes — file path = URL. Dynamic routes use `[param].ts` or `[...all].ts`. API endpoints (returning HTML/JSON, not pages) live in `src/pages/api/`.
+- **`.astro` component format** — frontmatter (TypeScript between `---`) runs server-side at request time; the template below is HTML + expressions. Props are typed and passed like `<Component prop={value} />`.
+- **`<slot />`** — layouts use `<slot />` to inject child content, analogous to `children` in React.
+- **No client JS by default** — Astro components are zero-JS by default. Use `<script>` for client-side code, or `client:*` directives for interactive framework components (we don't use these — prefer HTMX + vanilla JS).
+- **`src/layouts/`** — layout components that provide the full HTML shell (`<html>`, `<head>`, `<body>`). Pages import and wrap their content in a layout.
+- **`public/`** — static assets served as-is. Do not put compiled output here; Astro's build handles that.
+- **Context7 docs:** Use library ID `/withastro/docs` with `mcp__plugin_context7_context7__query-docs` when referencing Astro APIs, configuration, or integrations.
+
 ### Stack Principles
 
 - **Astro v6 Cloudflare bindings.** Access D1, KV, and secrets via `import { env } from "cloudflare:workers"` — NOT `Astro.locals.runtime.env` (removed in Astro v6). The `cloudflare:workers` module is declared in `src/env.d.ts`.
 - **No build tooling beyond Astro.** No Webpack, no custom bundler config. Astro (built on Vite) handles the build pipeline. Only add Vite plugins when required by the stack (e.g., `@tailwindcss/vite` for Tailwind v4).
 - **File-based routing.** Astro's `src/pages/` directory defines all routes. HTMX partials are served from `src/pages/api/` as Astro endpoints returning HTML fragments.
-- **Minimal Alpine.js.** Alpine handles client-side state only where HTMX can't (modals, dropdown toggles, local UI state). Don't reach for Alpine when HTMX `hx-swap` can do the job.
-- **Basecoat first.** Use Basecoat's class-based components (btn, card, badge, input, select, dialog, tabs, toast, skeleton, avatar, dropdown-menu, popover, etc.) before writing custom CSS. Reference: https://basecoatui.com
+- **No Alpine.js.** All client-side interactivity is handled by vanilla JS in `src/layouts/Layout.astro`'s `<script>` block (bundled by Vite). HTMX handles all server interactions. Native `<dialog>` elements + `.showModal()` / `.close()` replace Alpine modals. A single delegated `addEventListener('click')` on `document` dispatches based on `data-action` attributes — no per-element listeners needed, works for HTMX-loaded content without re-initialization. Modal state object (`window.titleModal`) exposes `openTitle`, `close`, `openTrailer`, `closeTrailer`, `openOverview`, `openEpisode`.
+- **Basecoat first.** Use Basecoat's class-based components (btn, card, badge, input, select, dialog, tabs, toast, skeleton, avatar, dropdown-menu, popover, etc.) before writing custom CSS. Reference: https://basecoatui.com. **Context7 docs:** Use library ID `hunvreus/basecoat` with `mcp__plugin_context7_context7__query-docs` for Basecoat component APIs and usage.
 - **Drizzle ORM everywhere.** All D1 queries go through Drizzle. No raw SQL. This gives us typed schemas, migration tooling (`drizzle-kit`), and shared schema definitions with Better Auth.
 - **Lucide icons everywhere.** Use inline Lucide SVGs copied from lucide.dev. The `lucide-astro` package has SSR compatibility issues with Cloudflare Workers, so use raw `<svg>` elements instead. No other icon libraries.
 - **REST-like API structure from day one.** Clean, predictable endpoint naming.
@@ -332,7 +344,7 @@ Opened inline from any title card. Two-section layout:
 - Title info content constrained to `max-w-md`.
 
 **Scrollable body** — contains:
-- **Seasons** (TV shows): Horizontal season pill selector. Clicking a pill lazy-loads that season's episodes via HTMX into a horizontal carousel below. Previously loaded seasons are cached in Alpine state to avoid re-fetching.
+- **Seasons** (TV shows): Horizontal season pill selector. Clicking a pill loads that season's episodes via HTMX (`hx-get` / `hx-target`) into a single shared carousel below. The first season auto-loads via `hx-trigger="load"` when the section enters the DOM. Active pill class is managed by the delegated click listener in Layout.astro.
 - **Episode detail modal:** Clicking any episode card opens a detail modal with the episode still image as background (faded with gradient), show title, season/episode number, episode title, air date, runtime, and full description.
 - Cast row with actor images and character names.
 - Director (with like/dislike over image).
@@ -475,7 +487,7 @@ Even though everything is v1, build in this sequence so each layer has its found
 2. ~~**Score engine**~~ — MDbList API integration, score normalization, ReelScore calculation, KV caching, score refresh. `scoring.ts` and `mdblist.ts` with tests. **Done.**
 3. ~~**TMDB integration**~~ — Metadata fetching (title details, cast, genres, images, streaming availability), KV caching. `tmdb.ts` with full endpoint coverage. **Done.**
 4. ~~**Discovery feeds**~~ — Multi-source blended grid: 6 TMDB Discover sources (Popular Movies, Now Playing, Top Rated Movies, Upcoming, Popular TV, Top Rated TV) blended via `blendAndDedup` helper. Global anime filter, cross-dedup between pages, lockstep pagination. Title cards. HTMX partials. URL-param filter state. **Done.**
-5. ~~**Title modal**~~ — Detail view with score, metadata, cast, genres, trailer, seasons/episodes. URL-param driven (`?title=X`). Alpine store state. **Done.**
+5. ~~**Title modal**~~ — Detail view with score, metadata, cast, genres, trailer, seasons/episodes. URL-param driven (`?title=X`). Vanilla JS + native `<dialog>` elements + `data-action` event delegation. Alpine.js removed. **Done.**
 6. **Sticky header + Search** — StickyHeader.astro with search input, media type toggle, genre filter, sort options, streaming platform filter. Build `search.astro` page and `/api/search` endpoint. Wire all filter state to URL params.
 7. **Auth** — Build `db.ts` (Drizzle client factory) and `auth.ts` (Better Auth instance factory). Create database schema tables (users, preferences, ratings, watchlist, hidden titles, notifications). Login/signup pages, OAuth callback, `/api/auth/*` catch-all. Confirm auth works end-to-end before building personalization.
 8. **Personalization engine** — Preference data model, confidence weights, score adjustment logic. Build `personalization.ts`.
@@ -551,7 +563,7 @@ Code should be thoroughly commented so **any developer** can understand what's h
   - API endpoint contracts — correct response shapes, HTTP status codes, auth/unauth behavior.
 - **What NOT to test in v1:**
   - E2E browser tests (Playwright, Cypress) — too brittle while UI is actively iterating.
-  - HTMX partial rendering or Alpine UI state — too coupled to markup.
+  - HTMX partial rendering or vanilla JS UI state — too coupled to markup.
   - Third-party API integrations (MDbList, TMDB) — mock them in unit tests.
 - **Tests must pass before any PR is merged.**
 - **Write tests alongside code**, not as a follow-up step. When building `scoring.ts`, write `scoring.test.ts` in the same session.

@@ -20,7 +20,7 @@ import {
 /**
  * Renders a single episode card for the horizontal carousel.
  * The entire card is clickable — opens the episode detail modal
- * via Alpine store's openEpisode() method.
+ * via the titleModal.openEpisode() method (data-action="open-episode" delegation).
  *
  * @param episode - Episode data from TMDB
  * @param showTitle - Parent show title for display in the episode modal
@@ -57,8 +57,10 @@ function renderEpisodeCard(episode: TmdbEpisode, showTitle: string): string {
   // Escape strings for HTML output
   const escapedName = episode.name.replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-  // Build episode data object for Alpine store — single method call replaces 8 getElementById calls
-  // Double quotes must become &quot; to survive inside the @click="..." HTML attribute
+  // Build episode data object — serialized into data-episode attribute.
+  // Double quotes become &quot; to survive inside the HTML attribute value.
+  // The delegated click listener in Layout.astro reads dataset.episode and calls
+  // titleModal.openEpisode(JSON.parse(...)) — HTML entity decoding is automatic.
   const episodeData = JSON.stringify({
     stillUrl: stillUrlLarge || stillUrl || "",
     showTitle,
@@ -67,12 +69,10 @@ function renderEpisodeCard(episode: TmdbEpisode, showTitle: string): string {
     airDate,
     runtime,
     overview: episode.overview || "No description available.",
-  }).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;");
-
-  const clickHandler = `$store.titleModal.openEpisode(${episodeData})`;
+  }).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
   return `
-    <div class="flex-shrink-0 w-40 cursor-pointer group/ep" @click="${clickHandler}">
+    <div class="flex-shrink-0 w-40 cursor-pointer group/ep" data-action="open-episode" data-episode="${episodeData}">
       <div class="relative">
         <div class="aspect-video rounded-md overflow-hidden bg-surface-700 transition-transform duration-200 group-hover/ep:scale-105">
           ${stillHtml}

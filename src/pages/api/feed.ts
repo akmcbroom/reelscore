@@ -114,7 +114,7 @@ function renderTitleCard(item: {
       </div>`;
 
   return `
-    <div class="group relative flex flex-col cursor-pointer" data-tmdb-id="${item.tmdbId}" data-media-type="${item.mediaType}" @click="$store.titleModal.openTitle(${item.tmdbId}, '${item.mediaType}')">
+    <div class="group relative flex flex-col cursor-pointer" data-tmdb-id="${item.tmdbId}" data-media-type="${item.mediaType}">
       <div class="flex flex-col relative">
         <div class="flex items-end self-end mr-2">
           <svg class="overflow-visible h-3" viewBox="0 0 14 14">
