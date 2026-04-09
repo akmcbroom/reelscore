@@ -1,10 +1,11 @@
+
 # CLAUDE.md — ReelScore
 
 > Watch what you like, not what the critics like.
 
 ReelScore aggregates **audience-only** scores from 6 sources into a single 0–100 score for movies and TV shows. U.S. releases only. Personalized to your taste over time.
 
-**Live:** getreelscore.com
+**Live:** getreelscore.com  
 **Repo:** github.com/akmcbroom/reelscore
 
 ---
@@ -17,6 +18,13 @@ ReelScore aggregates **audience-only** scores from 6 sources into a single 0–1
 - Use as many native Basecoat components as possible. Only go custom if Basecoat doesn't cover it, and confirm first.
 - Prefer surgical, targeted changes over full rewrites.
 - Deliver code and documentation as a single synchronized deliverable.
+- **Context Rot Prevention Rules (MANDATORY for all AI interactions with this file)** - CLAUDE.md is the **single source of truth**. Code must never contradict it.  
+  - Before proposing or making **any** code change: explicitly quote the exact CLAUDE.md section(s) being followed.  
+  - After every code change (even surgical): deliver a synchronized CLAUDE.md patch in the **same response**.  
+  - At the start of every work response: restate the active goal + files touched + “Context integrity check: [list any potential drift risks]”.  
+  - Maintain a **Live To-Do List** section at the bottom of CLAUDE.md. Update its status every time a task is completed, added, blocked, or descoped.  
+  - If code and spec ever diverge, the spec wins until the patch is approved and applied.  
+  - Never rely on memory of previous conversations — always re-read the relevant CLAUDE.md sections first.
 
 ---
 
@@ -153,45 +161,64 @@ reelscore/
 
 ## Score Engine
 
-### Sources
+### Philosophy (locked in)
+ReelScore is **mostly objective**. The number shown to anonymous users is the public **Base ReelScore**. Logged-in users see a **Personalized ReelScore = Base ReelScore + personalization swing** (max ±9). Personalization never rewrites the public/anonymous score.
 
-All 6 audience scores sourced via **MDbList API** (paid plan):
+### Sources (confirmed)
+All 6 audience-only scores sourced via **MDbList API** (paid plan). Use these exact keys:
 
-| # | Source                         | MDbList key      | `value` scale |
-| - | ------------------------------ | ---------------- | ------------- |
-| 1 | IMDb User Rating               | `imdb`           | 0–10          |
-| 2 | Rotten Tomatoes Audience Score  | `popcorn`        | 0–100         |
-| 3 | Metacritic User Score           | `metacriticuser` | 0–10          |
-| 4 | Letterboxd                     | `letterboxd`     | 0–5           |
-| 5 | Trakt                          | `trakt`          | 0–100         |
-| 6 | TMDB Audience Score             | `tmdb`           | 0–100         |
+| # | Source                         | MDbList key          | Raw scale |
+|---|--------------------------------|----------------------|-----------|
+| 1 | IMDb User Rating               | `imdb`               | 0–10      |
+| 2 | Rotten Tomatoes Audience Score | `tomatoesaudience`   | 0–100     |
+| 3 | Metacritic User Score          | `metacriticuser`     | 0–10      |
+| 4 | Letterboxd                     | `letterboxd`         | 0–5       |
+| 5 | Trakt                          | `trakt`              | 0–100     |
+| 6 | TMDB Audience Score            | `tmdb`               | 0–100     |
 
-**Important:** MDbList also returns `tomatoes` (critics Tomatometer) and `metacritic` (critics score) — we explicitly filter these OUT. We only use the audience/user variants listed above.
+Explicitly ignore all critic scores (`tomatoes`, `metacritic`, etc.).
 
-### Calculation
+### Base ReelScore Calculation (objective, same for everyone)
+1. Require **minimum 2 valid sources**.
+2. Normalize each source to 0–100:
+   - IMDb / Metacritic User / Letterboxd: `value × 10`
+   - Rotten Tomatoes Audience / Trakt / TMDB: `value` (already 0–100)
+3. Apply **source-specific base weights** + **vote_factor** (log-scaled, bounded 0.85–1.10):
 
-1. Use MDbList's pre-normalized `score` field (0–100) for each source. Fall back to manual normalization of `value` only if `score` is missing.
-2. Require **minimum 2 sources** to display a ReelScore. Titles with 0–1 sources are not shown.
-3. Average all available normalized scores = **Base ReelScore**.
-4. Apply personalization adjustments (see below) = **Personalized ReelScore** (logged-in users only).
-5. Clamp final score to 0–100.
+   | Source              | Base weight | Rationale |
+   |---------------------|-------------|-----------|
+   | `tomatoesaudience`  | 1.40        | Strongest verified audience signal |
+   | `imdb`              | 0.95        | Large sample, known skew |
+   | `letterboxd`        | 1.05        | High-quality cinephile signal |
+   | `trakt`             | 0.85        | Engaged watchers |
+   | `tmdb`              | 0.80        | Good coverage |
+   | `metacriticuser`    | 0.75        | Thinnest coverage |
 
-### Score Display Colors
+   `effective_weight = base_weight × vote_factor`
+4. Weighted average = `Σ(normalized × effective_weight) / Σ(effective_weights)`
+5. Apply small **reliability adjustment** (-3 to +3) based on source count, vote support, and freshness → **Base ReelScore** (clamped 0–100).
+6. This Base ReelScore is shown to anonymous users and is the canonical public number.
 
-| Range    | Color                   |
-| -------- | ----------------------- |
-| 0–59     | Red                     |
-| 60–69    | Gold/Amber              |
-| 70–100   | Green                   |
+### Personalized ReelScore (logged-in users only)
+`Personalized ReelScore = clamp(Base ReelScore + personalization swing, 0, 100)`  
+Personalization swing uses the exact confidence-weighted system defined below (genre ±1 max 3, people ±2 max 3, total ±9).  
+Confidence weights still grow with `log₂(confirming_ratings + 1) × 0.25` (capped 1.5) and self-correct on contradictions.
 
-### Score Caching (KV)
-
-- Cache MDbList API responses in Cloudflare KV.
+### Score Display Colors & Caching
+- Cache MDbList API responses in Cloudflare KV. **Important:** The full mathematical breakdown object (including all normalized scores, weights, vote factors, and the reliability adjustment) must be saved as a JSON payload inside this KV cache so the Dev Mode tooltip can display it without recalculating.
 - TTL strategy varies by title age:
   - **In theaters / airing now:** 24 hours
   - **Released within last 6 months:** 3 days
   - **Older titles:** 7 days
 - Users can manually refresh any title's score from the card "..." menu (bypasses cache, writes fresh). **Auth required.** Throttled to one refresh per title per user per 15 minutes — enforced server-side via KV key (`refresh:{user_id}:{tmdb_id}` with 15-minute TTL). Returns 429 if cooldown hasn't elapsed. Anonymous users see cached scores only.
+
+### Score Transparency (Dev Mode only)
+Hover any ReelScore badge (dev mode) shows full breakdown:
+- All source normalized scores + base_weight + vote_factor + effective_weight
+- Weighted average
+- Reliability adjustment
+- Base ReelScore
+- Personalization delta (if logged in)
 
 ---
 
@@ -225,20 +252,18 @@ Example progression:
 - 20 confirming ratings: weight = 1.5 (cap holds)
 
 ### Score Adjustments
-
 **Genre adjustments:**
-- Up to **3 matched genres** per title.
-- Each match: **+/-1 point** (liked genre = +1, disliked = -1).
-- When a title matches more than 3 user-preferred genres, the **top 3 by confidence weight** get the slots.
-- **Genre max: +/-3 points.**
+- Up to 3 matched genres.
+- Each match: +/-1 point.
+- Max: +/-3 points.
 
 **Actor/Director adjustments:**
-- Up to **3 matched people** per title (any combination of actors and directors).
-- Each match: **+/-2 points** (liked = +2, disliked = -2).
-- When a title matches more than 3 user-preferred people, the **top 3 by confidence weight** get the slots.
-- **People max: +/-6 points.**
+- Up to 3 matched people.
+- Each match: +/-2 points.
+- Max: +/-6 points.
 
-**Total max personalization swing: +/-9 points**, clamped to 0–100.
+**Total personalization swing: +/-9 points** (added to Base ReelScore for logged-in users only).  
+The swing is **deterministic and transparent** — shown in dev tooltip.
 
 ### What Thumbs Up/Down on Titles Does
 
@@ -479,38 +504,25 @@ Notifications are detected **lazily**, not via background cron jobs:
 
 ## Build Order
 
-Even though everything is v1, build in this sequence so each layer has its foundation.
+**Progress:** Steps 1–5 are complete.  
+**With the hybrid score engine now locked in, the entire scoring/personalization surface (steps 2, 8, 9, 10, 11) must be revisited and updated before continuing.**
 
-**Progress:** Steps 1–5 are complete. Steps 6–16 are not started.
-
-1. ~~**Project scaffold**~~ — Astro + Cloudflare adapter + Tailwind + Basecoat + Drizzle + D1/KV bindings. Deployed to Workers. **Done.**
-2. ~~**Score engine**~~ — MDbList API integration, score normalization, ReelScore calculation, KV caching, score refresh. `scoring.ts` and `mdblist.ts` with tests. **Done.**
-3. ~~**TMDB integration**~~ — Metadata fetching (title details, cast, genres, images, streaming availability), KV caching. `tmdb.ts` with full endpoint coverage. **Done.**
-4. ~~**Discovery feeds**~~ — Multi-source blended grid: 6 TMDB Discover sources (Popular Movies, Now Playing, Top Rated Movies, Upcoming, Popular TV, Top Rated TV) blended via `blendAndDedup` helper. Global anime filter, cross-dedup between pages, lockstep pagination. Title cards. HTMX partials. URL-param filter state. **Done.**
-5. ~~**Title modal**~~ — Detail view with score, metadata, cast, genres, trailer, seasons/episodes. URL-param driven (`?title=X`). Vanilla JS + native `<dialog>` elements + `data-action` event delegation. Alpine.js removed. **Done.**
+1. ~~**Project scaffold**~~ ✅  
+2. ~~**Score engine**~~ ✅ → **REVISIT** (implement new weighted Base ReelScore + reliability adjustment + tomatoesaudience key)  
+3. ~~**TMDB integration**~~ ✅  
+4. ~~**Discovery feeds**~~ ✅  
+5. ~~**Title modal**~~ ✅  
 6. **Sticky header + Search** — StickyHeader.astro with search input, media type toggle, genre filter, sort options, streaming platform filter. Build `search.astro` page and `/api/search` endpoint. Wire all filter state to URL params.
 7. **Auth** — Build `db.ts` (Drizzle client factory) and `auth.ts` (Better Auth instance factory). Create database schema tables (users, preferences, ratings, watchlist, hidden titles, notifications). Login/signup pages, OAuth callback, `/api/auth/*` catch-all. Confirm auth works end-to-end before building personalization.
-8. **Personalization engine** — Preference data model, confidence weights, score adjustment logic. Build `personalization.ts`.
-9. **Onboarding** — All 4 steps required (genres, actors, directors, title ratings). Title rating step uses genre-aware selection via TMDB Discover (titles matching user's chosen genres). Minimums enforced per step. `onboarding_completed` gates Scored for You access. Not re-runnable; preferences editable from Profile.
-10. **Thumbs up/down on titles** — Rating UI on cards and modal, preference profile updates.
-11. **Scored for You feed** — TMDB Discover-based per-user candidate pool (genre, actor, director dimensions). Union + deduplicate + personalized score sort. Horizontal row at top of home page. Requires `onboarding_completed`. Discover results cached in KV per user (1-hour TTL).
+8. **Personalization engine** → **REVISIT** (update to new Base + swing model) — Preference data model, confidence weights, score adjustment logic. Build `personalization.ts`.
+9. **Onboarding** → **REVISIT** (ensure it feeds the new confidence system correctly) — All 4 steps required (genres, actors, directors, title ratings). Title rating step uses genre-aware selection via TMDB Discover (titles matching user's chosen genres). Minimums enforced per step. `onboarding_completed` gates Scored for You access. Not re-runnable; preferences editable from Profile.
+10. **Thumbs up/down on titles** → **REVISIT** — Rating UI on cards and modal, preference profile updates.
+11. **Scored for You feed** → **REVISIT** — TMDB Discover-based per-user candidate pool (genre, actor, director dimensions). Union + deduplicate + personalized score sort. Horizontal row at top of home page. Requires `onboarding_completed`. Discover results cached in KV per user (1-hour TTL).
 12. **Watchlist** — Save/remove titles, watchlist page.
 13. **In-app notifications** — Score change detection, streaming availability changes, notification badge.
 14. **Profile page** — Manage preferences, hidden titles, streaming platforms, notification settings.
 15. **Polish** — Score transparency hover (dev mode), share functionality, edge cases, performance.
 16. **Monetization** — Native ad slots in feed grid (every 9th item), provider-agnostic container, premium ad-free tier.
-
----
-
-## Design Direction
-
-- Sleek, modern, confident. Think premium streaming app, not generic dashboard.
-- Dark mode primary (media content looks best on dark backgrounds).
-- Score colors are the primary accent palette (red/gold/green).
-- Poster-forward design — large images, minimal chrome around them.
-- The ReelScore pill is the signature UI element. It should feel distinctive and instantly recognizable.
-- Mobile-first responsive design.
-- Basecoat components provide the foundation. Custom styling only where the brand needs to differentiate (score pill, title card layout, feed sections).
 
 ---
 
@@ -607,3 +619,15 @@ Feature additions that follow existing patterns (new feed section, new filter op
 **Every PR must include updates to CLAUDE.md and README.md** that reflect the changes being made. These are not follow-up tasks — they ship in the same PR as the code. If the scoring formula changes, CLAUDE.md's Personalization System section updates in that PR. If a new API endpoint is added, it appears in the API Endpoints section in that PR.
 
 The goal: **CLAUDE.md is always the source of truth.** If someone reads this file, they understand how the app works right now, not how it worked three PRs ago.
+
+---
+
+## Live To-Do List (updated after every change)
+
+- [x] Implement hybrid Score Engine in `src/lib/scoring.ts` (weighted Base ReelScore, vote factor, reliability adjustment, tomatoesaudience key) + update tests — **Done 2026-04-09**
+- [x] Update MDbList API parser (`src/lib/mdblist.ts`) to look for `tomatoesaudience` instead of `popcorn`; add `ScoreBreakdown` + `CachedScoreData.breakdown` types — **Done 2026-04-09**
+- [x] Update README.md to match new spec (remove Alpine.js, describe weighted scoring) — **Done 2026-04-09**
+- [ ] Revisit & patch Personalization engine (`src/lib/personalization.ts`) — pending Build Order Step 8
+- [ ] Sync all affected components (TitleCard, ScoreBadge, TitleModal) to wire dev tooltip breakdown display — pending Build Order Step 15
+- [ ] Update any API endpoints that return scores to expose `breakdown` field — pending
+- [ ] Smoke test anonymous vs logged-in score display (requires `.dev.vars` API keys) — pending  

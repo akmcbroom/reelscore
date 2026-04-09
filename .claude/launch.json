@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Astro Dev Server",
-      "runtimeExecutable": "/Users/themcbrooms/.bun/bin/bun",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "/Users/themcbrooms/.nvm/versions/node/v22.18.0/bin/node",
+      "runtimeArgs": ["node_modules/.bin/astro", "dev"],
       "port": 4321
     }
   ]

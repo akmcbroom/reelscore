@@ -50,10 +50,11 @@ export interface MDbListResponse {
 /**
  * The 6 audience score sources we care about.
  * MDbList may return other sources — we filter to only these.
+ * Note: "tomatoesaudience" is the MDbList key for the RT Audience Score (was "popcorn" in older API versions).
  */
 export const AUDIENCE_SOURCES = [
   "imdb",
-  "popcorn",
+  "tomatoesaudience",
   "metacriticuser",
   "letterboxd",
   "trakt",
@@ -73,6 +74,29 @@ export interface NormalizedScore {
   votes: number;
 }
 
+/**
+ * Full mathematical breakdown of a ReelScore calculation.
+ * Stored in KV cache so the dev tooltip can display it without recalculating.
+ * See CLAUDE.md Score Transparency (Dev Mode).
+ */
+export interface ScoreBreakdown {
+  /** Per-source contribution details */
+  sources: Array<{
+    source: AudienceSource;
+    normalizedScore: number;
+    baseWeight: number;
+    voteFactor: number;
+    effectiveWeight: number;
+    votes: number;
+  }>;
+  /** Weighted average before reliability adjustment */
+  weightedAverage: number;
+  /** Reliability adjustment applied (-3 to +3) */
+  reliabilityAdjustment: number;
+  /** Final clamped Base ReelScore */
+  baseReelScore: number;
+}
+
 /** Cached score data stored in KV */
 export interface CachedScoreData {
   tmdbId: number;
@@ -80,6 +104,12 @@ export interface CachedScoreData {
   scores: NormalizedScore[];
   sourceCount: number;
   fetchedAt: string;
+  /**
+   * Full calculation breakdown for dev tooltip display.
+   * Populated by calculateReelScore() and stored here so future reads
+   * don't need to recalculate — see CLAUDE.md Score Transparency.
+   */
+  breakdown?: ScoreBreakdown;
 }
 
 // --- Normalization ---
@@ -91,7 +121,7 @@ export interface CachedScoreData {
  *
  * Different sources use different scales for the `value` field:
  * - IMDb: 0-10 (multiply by 10)
- * - Rotten Tomatoes Audience (popcorn): 0-100 (already normalized)
+ * - Rotten Tomatoes Audience (tomatoesaudience): 0-100 (already normalized)
  * - Metacritic User (metacriticuser): 0-10 (multiply by 10)
  * - Letterboxd: 0-5 (multiply by 20)
  * - Trakt: 0-100 (already normalized, comes as percentage)
@@ -116,7 +146,7 @@ export function normalizeScore(value: number, source: string): number | null {
     case "letterboxd":
       // 0-5 scale → multiply by 20
       return Math.round(value * 20);
-    case "popcorn":
+    case "tomatoesaudience":
     case "tmdb":
     case "trakt":
       // Already on 0-100 scale

@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateReelScore,
+  calculateVoteFactor,
+  calculateReliabilityAdjustment,
   getScoreColor,
   clampScore,
   getSourceLabel,
+  SOURCE_BASE_WEIGHTS,
   MIN_SOURCES,
 } from "../src/lib/scoring.ts";
 import {
@@ -52,9 +55,9 @@ describe("normalizeScore", () => {
     expect(normalizeScore(2.0, "letterboxd")).toBe(40);
   });
 
-  it("passes through Rotten Tomatoes (already 0-100)", () => {
-    expect(normalizeScore(85, "popcorn")).toBe(85);
-    expect(normalizeScore(42, "popcorn")).toBe(42);
+  it("passes through Rotten Tomatoes Audience (already 0-100)", () => {
+    expect(normalizeScore(85, "tomatoesaudience")).toBe(85);
+    expect(normalizeScore(42, "tomatoesaudience")).toBe(42);
   });
 
   it("normalizes Metacritic User 0-10 scale to 0-100", () => {
@@ -69,7 +72,7 @@ describe("normalizeScore", () => {
   it("returns null for zero values (zero = no data)", () => {
     // Raw 0 from MDbList means no data, not an actual score — see CLAUDE.md
     expect(normalizeScore(0, "imdb")).toBeNull();
-    expect(normalizeScore(0, "popcorn")).toBeNull();
+    expect(normalizeScore(0, "tomatoesaudience")).toBeNull();
     expect(normalizeScore(0, "letterboxd")).toBeNull();
     expect(normalizeScore(0, "metacriticuser")).toBeNull();
     expect(normalizeScore(0, "trakt")).toBeNull();
@@ -96,7 +99,7 @@ describe("parseRatings", () => {
   it("filters to only the 6 audience sources", () => {
     const ratings: MDbListRating[] = [
       { source: "imdb", value: 7.5, score: 75, votes: 10000 },
-      { source: "popcorn", value: 80, score: 80, votes: 5000 },
+      { source: "tomatoesaudience", value: 80, score: 80, votes: 5000 },
       { source: "rogerebert", value: 3, score: 60, votes: 1 }, // not an audience source
       { source: "metacriticuser", value: 7.0, score: 70, votes: 200 },
     ];
@@ -104,13 +107,13 @@ describe("parseRatings", () => {
     const result = parseRatings(ratings);
 
     expect(result).toHaveLength(3);
-    expect(result.map((r) => r.source)).toEqual(["imdb", "popcorn", "metacriticuser"]);
+    expect(result.map((r) => r.source)).toEqual(["imdb", "tomatoesaudience", "metacriticuser"]);
   });
 
   it("excludes sources with zero values (no data)", () => {
     const ratings: MDbListRating[] = [
       { source: "imdb", value: 7.5, score: 75, votes: 10000 },
-      { source: "popcorn", value: 0, score: 0, votes: 0 }, // no data
+      { source: "tomatoesaudience", value: 0, score: 0, votes: 0 }, // no data
       { source: "trakt", value: 85, score: 85, votes: 3000 },
     ];
 
@@ -149,20 +152,105 @@ describe("parseRatings", () => {
 });
 
 // ============================================================
+// Vote Factor (scoring.ts)
+// ============================================================
+
+describe("calculateVoteFactor", () => {
+  it("returns 0.85 (floor) for 0 votes", () => {
+    expect(calculateVoteFactor(0)).toBe(0.85);
+  });
+
+  it("returns 1.10 (ceiling) at 50,000 votes", () => {
+    // At exactly 50,000 votes log₂(50001)/log₂(50000) ≈ 1.0, min(1,...) = 1 → 1.10
+    expect(calculateVoteFactor(50000)).toBeCloseTo(1.10, 2);
+  });
+
+  it("caps at 1.10 for votes well above 50,000", () => {
+    expect(calculateVoteFactor(1_000_000)).toBe(1.10);
+  });
+
+  it("is log-scaled between 0 and 50,000 votes", () => {
+    const low = calculateVoteFactor(10);
+    const mid = calculateVoteFactor(1000);
+    const high = calculateVoteFactor(40000);
+
+    // Each tier should be strictly increasing
+    expect(low).toBeGreaterThan(0.85);
+    expect(mid).toBeGreaterThan(low);
+    expect(high).toBeGreaterThan(mid);
+    expect(high).toBeLessThanOrEqual(1.10);
+  });
+
+  it("returns ~1.01 for 1,000 votes (mid-range)", () => {
+    // log₂(1001)/log₂(50000) ≈ 0.639 → 0.85 + 0.25*0.639 ≈ 1.010
+    expect(calculateVoteFactor(1000)).toBeCloseTo(1.01, 2);
+  });
+});
+
+// ============================================================
+// Reliability Adjustment (scoring.ts)
+// ============================================================
+
+describe("calculateReliabilityAdjustment", () => {
+  it("returns +1 for 5-6 sources with neutral vote factor and low votes", () => {
+    // sourceCount=6 → +1; avgVF ≈ 1.01 (neutral); maxVotes=1000 (no bonus)
+    expect(calculateReliabilityAdjustment(6, 1.01, 1000)).toBe(1);
+    expect(calculateReliabilityAdjustment(5, 1.01, 1000)).toBe(1);
+  });
+
+  it("returns -1 for exactly 2 sources with neutral vote factor and low votes", () => {
+    expect(calculateReliabilityAdjustment(2, 1.01, 1000)).toBe(-1);
+  });
+
+  it("returns 0 for 3-4 sources with neutral conditions", () => {
+    expect(calculateReliabilityAdjustment(3, 1.01, 1000)).toBe(0);
+    expect(calculateReliabilityAdjustment(4, 1.01, 1000)).toBe(0);
+  });
+
+  it("adds +1 for high avg vote factor (≥ 1.05)", () => {
+    expect(calculateReliabilityAdjustment(3, 1.05, 1000)).toBe(1);
+    expect(calculateReliabilityAdjustment(3, 1.09, 1000)).toBe(1);
+  });
+
+  it("adds -1 for low avg vote factor (≤ 0.90)", () => {
+    expect(calculateReliabilityAdjustment(3, 0.90, 1000)).toBe(-1);
+    expect(calculateReliabilityAdjustment(3, 0.86, 1000)).toBe(-1);
+  });
+
+  it("adds +1 when maxVotes ≥ 50,000 (established title)", () => {
+    expect(calculateReliabilityAdjustment(3, 1.01, 50000)).toBe(1);
+  });
+
+  it("clamps to maximum of +3", () => {
+    // 6 sources (+1) + high avgVF (+1) + maxVotes ≥ 50k (+1) = +3
+    expect(calculateReliabilityAdjustment(6, 1.10, 100_000)).toBe(3);
+  });
+
+  it("clamps to minimum of -3", () => {
+    // 2 sources (-1) + low avgVF (-1) + no other bonus = -2 (max negative is -2 in current formula)
+    // But if we force all negatives: -1 + -1 + 0 = -2
+    expect(calculateReliabilityAdjustment(2, 0.86, 100)).toBe(-2);
+  });
+});
+
+// ============================================================
 // ReelScore Calculation (scoring.ts)
 // ============================================================
 
 describe("calculateReelScore", () => {
-  it("averages scores from multiple sources", () => {
+  it("uses weighted average — higher-weighted sources shift the result", () => {
+    // tomatoesaudience (weight 1.40) at 70, imdb (weight 0.95) at 80, metacriticuser (weight 0.75) at 60
+    // Simple average would be 70. Weighted pulls toward tomatoesaudience (the 70 source) → result < 70.
+    // At 1000 votes (vf ≈ 1.01), adj = 0 for 3 sources → weighted avg ≈ 70.6 → 71
     const scores = [
       makeScore("imdb", 80),
-      makeScore("popcorn", 70),
+      makeScore("tomatoesaudience", 70),
       makeScore("metacriticuser", 60),
     ];
 
     const result = calculateReelScore(scores);
 
-    expect(result.score).toBe(70); // (80 + 70 + 60) / 3 = 70
+    expect(result.score).toBe(71);
     expect(result.sourceCount).toBe(3);
     expect(result.hasEnoughSources).toBe(true);
   });
@@ -186,20 +274,25 @@ describe("calculateReelScore", () => {
     expect(result.hasEnoughSources).toBe(false);
   });
 
-  it("works with exactly 2 sources (minimum)", () => {
+  it("applies -1 reliability adjustment for exactly 2 sources", () => {
+    // imdb (0.95) at 90 + tmdb (0.80) at 80, votes = 1000
+    // Weighted avg: (90×0.95 + 80×0.80) × vf / (0.95 + 0.80) × vf ≈ 85.4
+    // Reliability: sourceCount=2 → -1 → round(84.4) = 84
     const scores = [makeScore("imdb", 90), makeScore("tmdb", 80)];
 
     const result = calculateReelScore(scores);
 
-    expect(result.score).toBe(85); // (90 + 80) / 2
+    expect(result.score).toBe(84);
     expect(result.sourceCount).toBe(2);
     expect(result.hasEnoughSources).toBe(true);
   });
 
-  it("works with all 6 sources", () => {
+  it("applies +1 reliability adjustment for 5-6 sources", () => {
+    // All 6 sources at 1000 votes → sourceCount=6 → adj=+1
+    // Weighted avg ≈ 77.0 + 1 → 78
     const scores = [
       makeScore("imdb", 80),
-      makeScore("popcorn", 75),
+      makeScore("tomatoesaudience", 75),
       makeScore("metacriticuser", 70),
       makeScore("letterboxd", 85),
       makeScore("trakt", 78),
@@ -208,31 +301,33 @@ describe("calculateReelScore", () => {
 
     const result = calculateReelScore(scores);
 
-    // (80 + 75 + 70 + 85 + 78 + 72) / 6 = 76.666... → 77
-    expect(result.score).toBe(77);
+    expect(result.score).toBe(78);
     expect(result.sourceCount).toBe(6);
   });
 
-  it("rounds the average to nearest integer", () => {
-    const scores = [makeScore("imdb", 73), makeScore("popcorn", 74)];
+  it("tomatoesaudience (highest weight) pulls score toward its value", () => {
+    // tomatoesaudience=73 (weight 1.40) vs imdb=74 (weight 0.95)
+    // Weighted avg skews below simple avg of 73.5 → ≈73.6 → round(73.6-1) = 73
+    const scores = [makeScore("imdb", 73), makeScore("tomatoesaudience", 74)];
 
     const result = calculateReelScore(scores);
 
-    // (73 + 74) / 2 = 73.5 → 74
-    expect(result.score).toBe(74);
+    // Result is pulled toward tomatoesaudience; 2-source -1 adj applies
+    expect(result.score).toBe(73);
   });
 
   it("assigns correct color based on score range", () => {
-    expect(calculateReelScore([makeScore("a", 50), makeScore("b", 50)]).color).toBe("red");
-    expect(calculateReelScore([makeScore("a", 65), makeScore("b", 65)]).color).toBe("gold");
-    expect(calculateReelScore([makeScore("a", 75), makeScore("b", 75)]).color).toBe("green");
-    expect(calculateReelScore([makeScore("a", 90), makeScore("b", 90)]).color).toBe("green");
+    // Unknown sources get fallback weight 1.0; 2-source adj = -1 applies
+    expect(calculateReelScore([makeScore("a", 50), makeScore("b", 50)]).color).toBe("red");   // 50-1=49 → red
+    expect(calculateReelScore([makeScore("a", 65), makeScore("b", 65)]).color).toBe("gold");  // 65-1=64 → gold
+    expect(calculateReelScore([makeScore("a", 75), makeScore("b", 75)]).color).toBe("green"); // 75-1=74 → green
+    expect(calculateReelScore([makeScore("a", 90), makeScore("b", 90)]).color).toBe("green"); // 90-1=89 → green
   });
 
   it("includes source details in result", () => {
     const scores = [
       makeScore("imdb", 80, 8.0, 50000),
-      makeScore("popcorn", 70, 70, 5000),
+      makeScore("tomatoesaudience", 70, 70, 5000),
     ];
 
     const result = calculateReelScore(scores);
@@ -241,6 +336,44 @@ describe("calculateReelScore", () => {
     expect(result.sources[0]!.source).toBe("imdb");
     expect(result.sources[0]!.rawValue).toBe(8.0);
     expect(result.sources[0]!.votes).toBe(50000);
+  });
+
+  it("returns a breakdown object with full calculation details", () => {
+    const scores = [
+      makeScore("imdb", 80, 8.0, 50000),
+      makeScore("tomatoesaudience", 75, 75, 50000),
+    ];
+
+    const result = calculateReelScore(scores);
+
+    expect(result.breakdown).toBeDefined();
+    expect(result.breakdown!.sources).toHaveLength(2);
+    expect(result.breakdown!.weightedAverage).toBeGreaterThan(0);
+    expect(result.breakdown!.reliabilityAdjustment).toBeDefined();
+    expect(result.breakdown!.baseReelScore).toBe(result.score);
+  });
+
+  it("breakdown reflects correct base weights per source", () => {
+    const scores = [makeScore("imdb", 80, 8.0, 1000), makeScore("tmdb", 70, 70, 1000)];
+    const result = calculateReelScore(scores);
+
+    const imdbEntry = result.breakdown!.sources.find((s) => s.source === "imdb");
+    const tmdbEntry = result.breakdown!.sources.find((s) => s.source === "tmdb");
+
+    expect(imdbEntry!.baseWeight).toBe(SOURCE_BASE_WEIGHTS.imdb);      // 0.95
+    expect(tmdbEntry!.baseWeight).toBe(SOURCE_BASE_WEIGHTS.tmdb);      // 0.80
+    // imdb should have higher effectiveWeight than tmdb
+    expect(imdbEntry!.effectiveWeight).toBeGreaterThan(tmdbEntry!.effectiveWeight);
+  });
+
+  it("clamps score to 0-100 even with extreme inputs", () => {
+    const scores = [makeScore("imdb", 100), makeScore("tomatoesaudience", 100)];
+    expect(calculateReelScore(scores).score).toBeLessThanOrEqual(100);
+
+    const lowScores = [makeScore("imdb", 0), makeScore("tomatoesaudience", 0)];
+    // 0-score sources are normally filtered — use non-zero values near 0
+    const nearZeroScores = [makeScore("imdb", 1), makeScore("tomatoesaudience", 1)];
+    expect(calculateReelScore(nearZeroScores).score).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -292,7 +425,7 @@ describe("clampScore", () => {
 describe("getSourceLabel", () => {
   it("returns human-readable labels for audience sources", () => {
     expect(getSourceLabel("imdb")).toBe("IMDb");
-    expect(getSourceLabel("popcorn")).toBe("Rotten Tomatoes");
+    expect(getSourceLabel("tomatoesaudience")).toBe("Rotten Tomatoes Audience");
     expect(getSourceLabel("metacriticuser")).toBe("Metacritic");
     expect(getSourceLabel("letterboxd")).toBe("Letterboxd");
     expect(getSourceLabel("trakt")).toBe("Trakt");

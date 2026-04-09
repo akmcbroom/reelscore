@@ -31,7 +31,7 @@ Logged-in users get personalized scores based on their genre, actor, and directo
 | ------------- | --------------------------------------------- |
 | Framework     | Astro (SSR on Cloudflare Workers)             |
 | Styling       | Tailwind CSS v4                               |
-| UI Components | Basecoat + HTMX + Alpine.js                   |
+| UI Components | Basecoat + HTMX + vanilla JS                  |
 | Auth          | Better Auth (email/password, Google, Apple)    |
 | Database      | Cloudflare D1 (SQLite) via Drizzle ORM        |
 | Caching       | Cloudflare KV                                 |
@@ -161,12 +161,16 @@ reelscore/
 ## How Scoring Works
 
 1. MDbList API provides up to 6 normalized audience scores per title.
-2. Scores are averaged into a **Base ReelScore** (minimum 2 sources required).
-3. For logged-in users, genre/actor/director preferences adjust the score:
+2. Scores are combined into a **Base ReelScore** using a weighted average (minimum 2 sources required):
+   - Each source has a base weight reflecting signal quality (RT Audience highest at 1.40×, Metacritic User lowest at 0.75×).
+   - Each source's weight is further scaled by a vote-count confidence factor (log-scaled, 0.85–1.10) — sources with fewer votes are down-weighted.
+   - A small reliability adjustment (−3 to +3) is applied based on source count, vote support, and title depth.
+3. The Base ReelScore is the same for all users (anonymous included).
+4. For logged-in users, genre/actor/director preferences adjust the score:
    - Up to 3 genre matches: +/-1 each (max +/-3)
    - Up to 3 actor/director matches: +/-2 each (max +/-6)
-   - **Total max swing: +/-9 points**
-4. Final score is clamped to 0–100.
+   - **Total max personalization swing: +/-9 points**
+5. Final score is clamped to 0–100.
 
 ### Score Colors
 
