@@ -14,7 +14,8 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^13.1.4",
+    "@astrojs/cloudflare": "^13.1.8",
+    "@cloudflare/vite-plugin": "^1.31.2",
     "@tailwindcss/vite": "^4.2.2",
     "astro": "^6.1.1",
     "basecoat-css": "^0.3.11",
