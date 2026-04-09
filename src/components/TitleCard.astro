@@ -55,9 +55,8 @@ else if (score >= 70) tier = scoreTiers.green;
 else if (score >= 60) tier = scoreTiers.gold;
 else tier = scoreTiers.red;
 
-// Unique SVG gradient IDs per card — prevents conflicts when 60+ cards render on one page
-const gradL = `grad-l-${tmdbId}`;
-const gradR = `grad-r-${tmdbId}`;
+// Unique SVG gradient ID per card — prevents conflicts when 60+ cards render on one page
+const gradId = `grad-${tmdbId}`;
 
 // Dev tooltip with source breakdown — same as ScoreBadge behavior
 const isDev = import.meta.env.DEV;
@@ -82,45 +81,57 @@ if (isDev && sources.length > 0) {
   data-media-type={mediaType}
 >
   <div class="flex flex-col relative">
-    {/* Score lip — small gradient tab with concave SVG curves on both sides.
-        Positioned right-aligned above the poster. The curves flow into the
-        poster's top border, creating a seamless branded tab effect. */}
-    <div class="flex items-end self-end mr-2">
-      {/* Left concave curve */}
-      <svg class="overflow-visible h-3" viewBox="0 0 14 14">
-        <defs>
-          <linearGradient id={gradL} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color={tier.from} />
-            <stop offset="100%" stop-color={tier.to} />
-          </linearGradient>
-        </defs>
-        <path d="M14,0 Q14,14 0,14 L14,14 Z" fill={`url(#${gradL})`} />
-      </svg>
-
-      {/* Score tab */}
-      <div
-        class:list={["flex items-center justify-center z-10 rounded-t-lg w-12 h-5 bg-gradient-to-b", tier.fromClass, tier.toClass]}
+    {/* Score lip — single pure SVG with the branded concave-sided shape.
+        Gradient is applied directly to the path fill via linearGradient,
+        giving a clean continuous gradient across the whole shape.
+        Positioned right-aligned above the poster. */}
+    <div class="self-end mr-2">
+      <svg
+        width="70"
+        height="23"
+        viewBox="0 0 84 28"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
         title={scoreTitle}
       >
-        <span class:list={["font-mono font-bold text-sm tabular-nums", tier.textColor]}>
-          {isUnreleased ? (
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          ) : score !== null ? score : "—"}
-        </span>
-      </div>
-
-      {/* Right concave curve */}
-      <svg class="overflow-visible h-3" viewBox="0 0 14 14">
         <defs>
-          <linearGradient id={gradR} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="28" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stop-color={tier.from} />
             <stop offset="100%" stop-color={tier.to} />
           </linearGradient>
         </defs>
-        <path d="M0,0 Q0,14 14,14 L0,14 Z" fill={`url(#${gradR})`} />
+        <path
+          d="M56 0C63.6112 0 69.8035 6.07368 69.9951 13.6387L70.0049 14.3613C70.1965 21.9263 76.3888 28 84 28H0C7.61118 28 13.8035 21.9263 13.9951 14.3613L14.0049 13.6387C14.1965 6.07368 20.3888 0 28 0H56Z"
+          fill={`url(#${gradId})`}
+        />
+        {isUnreleased ? (
+          <g transform="translate(33.6, 5.6) scale(0.7)">
+            <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" fill="none" />
+            <polyline points="12 6 12 12 16 14" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          </g>
+        ) : score !== null ? (
+          <text
+            x="42"
+            y="14"
+            text-anchor="middle"
+            dominant-baseline="central"
+            fill="rgba(255,255,255,0.9)"
+            font-size="15"
+            font-family="ui-monospace, monospace"
+            font-weight="bold"
+          >{score}</text>
+        ) : (
+          <text
+            x="42"
+            y="14"
+            text-anchor="middle"
+            dominant-baseline="central"
+            fill="rgba(255,255,255,0.6)"
+            font-size="15"
+            font-family="ui-monospace, monospace"
+            font-weight="bold"
+          >—</text>
+        )}
       </svg>
     </div>
 

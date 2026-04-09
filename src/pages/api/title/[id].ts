@@ -60,8 +60,9 @@ function getScoreTier(score: number | null, isUnreleased: boolean): ScoreTier {
 }
 
 /**
- * Renders the score lip HTML for the modal — gradient tab with concave SVG
- * curves on both sides. Larger than the card version (w-16 h-7, text-xl).
+ * Renders the score lip SVG for the modal — single pure SVG with the branded
+ * concave-sided shape. Larger than the card version (84×28 at full size).
+ * Gradient applied directly to the path fill for a clean continuous gradient.
  * Mirrors TitleCard.astro score lip design.
  */
 function renderScoreLip(
@@ -71,15 +72,7 @@ function renderScoreLip(
   tmdbId: number
 ): string {
   const tier = getScoreTier(score, isUnreleased);
-
-  let display: string;
-  if (isUnreleased) {
-    display = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-  } else if (score !== null) {
-    display = String(score);
-  } else {
-    display = "—";
-  }
+  const gradId = `grad-m-${tmdbId}`;
 
   let titleText = isUnreleased
     ? "Not yet released"
@@ -95,23 +88,34 @@ function renderScoreLip(
       : `Insufficient sources (${sources.length}/2)\n${breakdown}`;
   }
 
-  const gradL = `grad-ml-${tmdbId}`;
-  const gradR = `grad-mr-${tmdbId}`;
+  // Escape title text for use in an SVG title attribute
+  const escapedTitle = titleText.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\n/g, "&#10;");
+
+  // Score content — text number, dash, or clock icon (all in SVG coordinate space)
+  let contentSvg: string;
+  if (isUnreleased) {
+    // Clock icon centered at (42, 14), scaled from 24×24 viewBox to ~16×16 rendered units
+    contentSvg = `<g transform="translate(34, 6) scale(0.667)">
+      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" fill="none"/>
+      <polyline points="12 6 12 12 16 14" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>`;
+  } else if (score !== null) {
+    contentSvg = `<text x="42" y="14" text-anchor="middle" dominant-baseline="central" fill="rgba(255,255,255,0.9)" font-size="18" font-family="ui-monospace, monospace" font-weight="bold">${score}</text>`;
+  } else {
+    contentSvg = `<text x="42" y="14" text-anchor="middle" dominant-baseline="central" fill="rgba(255,255,255,0.6)" font-size="18" font-family="ui-monospace, monospace" font-weight="bold">—</text>`;
+  }
 
   return `
-    <div class="flex items-end">
-      <svg class="overflow-visible h-4" viewBox="0 0 16 16">
-        <defs><linearGradient id="${gradL}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tier.from}"/><stop offset="100%" stop-color="${tier.to}"/></linearGradient></defs>
-        <path d="M16,0 Q16,16 0,16 L16,16 Z" fill="url(#${gradL})"/>
-      </svg>
-      <div class="flex items-center justify-center z-10 rounded-t-lg w-16 h-7 bg-gradient-to-b ${tier.fromClass} ${tier.toClass}" title="${titleText}">
-        <span class="font-mono font-bold text-xl tabular-nums ${tier.textColor}">${display}</span>
-      </div>
-      <svg class="overflow-visible h-4" viewBox="0 0 16 16">
-        <defs><linearGradient id="${gradR}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${tier.from}"/><stop offset="100%" stop-color="${tier.to}"/></linearGradient></defs>
-        <path d="M0,0 Q0,16 16,16 L0,16 Z" fill="url(#${gradR})"/>
-      </svg>
-    </div>`;
+    <svg width="84" height="28" viewBox="0 0 84 28" fill="none" xmlns="http://www.w3.org/2000/svg" title="${escapedTitle}">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="28" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="${tier.from}"/>
+          <stop offset="100%" stop-color="${tier.to}"/>
+        </linearGradient>
+      </defs>
+      <path d="M56 0C63.6112 0 69.8035 6.07368 69.9951 13.6387L70.0049 14.3613C70.1965 21.9263 76.3888 28 84 28H0C7.61118 28 13.8035 21.9263 13.9951 14.3613L14.0049 13.6387C14.1965 6.07368 20.3888 0 28 0H56Z" fill="url(#${gradId})"/>
+      ${contentSvg}
+    </svg>`;
 }
 
 /**
