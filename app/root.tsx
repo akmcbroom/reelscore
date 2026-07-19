@@ -10,6 +10,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { Header } from "~/components/header";
 import { themeFromCookieHeader, applyTheme, type Theme } from "~/lib/theme";
 import "./app.css";
 
@@ -65,7 +66,12 @@ export default function App() {
     return () => mq.removeEventListener("change", onChange);
   }, [data?.theme]);
 
-  return <Outlet />;
+  return (
+    <>
+      <Header />
+      <Outlet />
+    </>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

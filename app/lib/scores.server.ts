@@ -168,27 +168,42 @@ export async function getScoresBatched(
     }
   }
 
-  // Step 4: one multi-row upsert for everything fetched
+  // Step 4: batched upsert for everything fetched. D1 caps a statement at
+  // 100 bound parameters (9 columns/row → max 11 rows), so chunk to 10 rows
+  // per statement and send the chunks as one db.batch() round trip.
   if (freshRows.length > 0) {
-    await db
-      .insert(scores)
-      .values(freshRows)
-      .onConflictDoUpdate({
-        target: scores.tmdbId,
-        set: {
-          mediaType: sql`excluded.media_type`,
-          imdbId: sql`excluded.imdb_id`,
-          baseReelscore: sql`excluded.base_reelscore`,
-          sourceCount: sql`excluded.source_count`,
-          scoresJson: sql`excluded.scores_json`,
-          breakdown: sql`excluded.breakdown`,
-          releaseDate: sql`excluded.release_date`,
-          fetchedAt: sql`excluded.fetched_at`,
-        },
-      });
+    const CHUNK = 10;
+    const statements = [];
+    for (let i = 0; i < freshRows.length; i += CHUNK) {
+      statements.push(upsertScores(db, freshRows.slice(i, i + CHUNK)));
+    }
+    await db.batch(statements as [typeof statements[0], ...typeof statements]);
   }
 
   return results;
+}
+
+/** Builds a multi-row upsert statement for a chunk of score rows. */
+function upsertScores(
+  db: ReturnType<typeof createDb>,
+  rows: (typeof scores.$inferInsert)[]
+) {
+  return db
+    .insert(scores)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: scores.tmdbId,
+      set: {
+        mediaType: sql`excluded.media_type`,
+        imdbId: sql`excluded.imdb_id`,
+        baseReelscore: sql`excluded.base_reelscore`,
+        sourceCount: sql`excluded.source_count`,
+        scoresJson: sql`excluded.scores_json`,
+        breakdown: sql`excluded.breakdown`,
+        releaseDate: sql`excluded.release_date`,
+        fetchedAt: sql`excluded.fetched_at`,
+      },
+    });
 }
 
 /**
@@ -210,22 +225,7 @@ export async function getScoresForTitle(
   if (!fresh) return null;
 
   const db = createDb(d1);
-  await db
-    .insert(scores)
-    .values(fresh.row)
-    .onConflictDoUpdate({
-      target: scores.tmdbId,
-      set: {
-        mediaType: sql`excluded.media_type`,
-        imdbId: sql`excluded.imdb_id`,
-        baseReelscore: sql`excluded.base_reelscore`,
-        sourceCount: sql`excluded.source_count`,
-        scoresJson: sql`excluded.scores_json`,
-        breakdown: sql`excluded.breakdown`,
-        releaseDate: sql`excluded.release_date`,
-        fetchedAt: sql`excluded.fetched_at`,
-      },
-    });
+  await upsertScores(db, [fresh.row]);
 
   return fresh.data;
 }

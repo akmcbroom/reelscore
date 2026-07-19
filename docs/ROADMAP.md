@@ -16,21 +16,22 @@ MVP line is the end of Phase 6. **Do not deploy before parity** (live site!).
 
 ## Phase 1 — Core libraries (no UI)
 
-- [ ] 1.1 Port scoring.ts + mdblist.ts verbatim + scoring tests green — HARD GATE
-- [ ] 1.2 Split tmdb.ts into app/lib/tmdb/* (one Discover builder per sort
-      lens, no blendAndDedup); tmdb tests green
-- [ ] 1.3 Drizzle `scores` schema + migration 0000 (drops old
+- [x] 1.1 Port scoring.ts + mdblist.ts verbatim + scoring tests green — HARD GATE (54 tests)
+- [x] 1.2 Split tmdb.ts into app/lib/tmdb/* (one Discover builder per sort
+      lens, no blendAndDedup); tmdb tests green (74 total)
+- [x] 1.3 Drizzle `scores` schema + migration 0000 (drops old
       score_cache_metadata); scores.server.ts (D1 batch cache, TTL tiers);
       cache.server.ts (KV helpers)
-- [ ] 1.4 Zod contracts in app/lib/schemas.ts (FeedQuery/FeedItem/FeedPage/TitleDetail)
+- [x] 1.4 Zod contracts in app/lib/schemas.ts (FeedQuery/FeedItem/FeedPage;
+      TitleDetail lands with Phase 3)
 
 ## Phase 2 — Feed
 
-- [ ] 2.1 feed.server.ts getFeedPage({type, sort, page}) + Hono GET /api/feed
-- [ ] 2.2 ScoreBadge (ported SVG score lip) + TitleCard (stock shadcn Card)
-- [ ] 2.3 home.tsx: SSR batch 1, grid, media tabs + sort selector via URL params
-- [ ] 2.4 useInfiniteFeed: sentinel, Set dedup (reset on tab/sort change),
-      skeletons, 10-batch cap
+- [x] 2.1 feed.server.ts getFeedPage({type, sort, page}) + Hono GET /api/feed
+- [x] 2.2 ScoreBadge (ported SVG score lip) + TitleCard (stock shadcn Card)
+- [x] 2.3 home.tsx: SSR batch 1, grid, media tabs + sort selector via URL params
+- [x] 2.4 useInfiniteFeed: sentinel, Set dedup (reset on tab/sort change),
+      skeletons, 10-batch cap — browser-verified (79/79 unique after batch 2)
 
 ## Phase 3 — Title modal
 
