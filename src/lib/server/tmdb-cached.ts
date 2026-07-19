@@ -4,14 +4,14 @@
  * barrel index — import directly as `~/lib/tmdb/cached.server`.
  */
 
-import { kvGet, kvPut, getCacheTtl } from "../cache.server";
-import { getTitleDetails, getCredits, getSeasonDetails } from "./details";
+import { kvGet, kvPut, getCacheTtl } from "./cache";
+import { getTitleDetails, getCredits, getSeasonDetails } from "$lib/tmdb/details";
 import {
   getWatchProviders,
   getLogos,
   getVideos,
   getContentRating,
-} from "./media";
+} from "$lib/tmdb/media";
 import type {
   TmdbCredits,
   TmdbLogo,
@@ -19,7 +19,7 @@ import type {
   TmdbTitle,
   TmdbVideo,
   TmdbWatchProviders,
-} from "./types";
+} from "$lib/tmdb/types";
 
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
 const THREE_DAYS = 3 * 24 * 60 * 60;

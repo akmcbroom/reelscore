@@ -9,17 +9,17 @@
 
 import { inArray, sql } from "drizzle-orm";
 
-import { createDb } from "~/db";
-import { scores } from "~/db/schema";
-import { getCacheTtl } from "./cache.server";
+import { createDb } from "./db";
+import { scores } from "./db/schema";
+import { getCacheTtl } from "./cache";
 import {
   fetchMDbListScores,
   parseRatings,
   type CachedScoreData,
   type NormalizedScore,
   type ScoreBreakdown,
-} from "./mdblist";
-import { calculateReelScore } from "./scoring";
+} from "$lib/mdblist";
+import { calculateReelScore } from "$lib/scoring";
 
 /** Input descriptor for a score lookup. */
 export interface ScoreRequest {

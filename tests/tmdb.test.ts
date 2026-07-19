@@ -9,7 +9,7 @@ import {
   type TmdbCredits,
   type TmdbSearchResult,
   type TmdbTrendingItem,
-} from "../app/lib/tmdb";
+} from "../src/lib/tmdb";
 
 // ============================================================
 // Image URL Helpers

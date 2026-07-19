@@ -8,14 +8,14 @@ import {
   getSourceLabel,
   SOURCE_BASE_WEIGHTS,
   MIN_SOURCES,
-} from "../app/lib/scoring";
+} from "../src/lib/scoring";
 import {
   normalizeScore,
   parseRatings,
   type MDbListRating,
   type NormalizedScore,
-} from "../app/lib/mdblist";
-import { getCacheTtl, getCacheTier } from "../app/lib/cache.server";
+} from "../src/lib/mdblist";
+import { getCacheTtl, getCacheTier } from "../src/lib/server/cache";
 
 // --- Helper to build NormalizedScore objects for testing ---
 

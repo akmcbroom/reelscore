@@ -4,7 +4,7 @@
     {
       "name": "ReelScore Dev Server",
       "runtimeExecutable": "/Users/themcbrooms/.nvm/versions/node/v22.18.0/bin/node",
-      "runtimeArgs": ["node_modules/.bin/react-router", "dev"],
+      "runtimeArgs": ["node_modules/.bin/vite", "dev"],
       "port": 5173
     }
   ]

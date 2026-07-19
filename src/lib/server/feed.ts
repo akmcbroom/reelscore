@@ -13,12 +13,12 @@ import {
   getDisplayTitle,
   getReleaseDate,
   type TmdbTrendingItem,
-} from "~/lib/tmdb";
-import { calculateReelScore } from "./scoring";
-import { getScoresBatched, type ScoreRequest } from "./scores.server";
-import type { FeedItem, FeedPage, FeedQuery } from "./schemas";
+} from "$lib/tmdb";
+import { calculateReelScore } from "$lib/scoring";
+import { getScoresBatched, type ScoreRequest } from "./scores";
+import type { FeedItem, FeedPage, FeedQuery } from "$lib/schemas";
 
-import { MAX_FEED_PAGES } from "./feed.constants";
+import { MAX_FEED_PAGES } from "$lib/feed.constants";
 
 /** TMDB pages (20 items each) fetched per feed batch, per active media type. */
 const TMDB_PAGES_PER_BATCH = 2;

@@ -4,7 +4,7 @@
  * TTL tier), then everything else in parallel through the KV-cached wrappers.
  */
 
-import { getBestLogo, getBestTrailer, getDirectors, getTopCast } from "~/lib/tmdb";
+import { getBestLogo, getBestTrailer, getDirectors, getTopCast } from "$lib/tmdb";
 import {
   getCachedContentRating,
   getCachedCredits,
@@ -13,10 +13,10 @@ import {
   getCachedTitleDetails,
   getCachedVideos,
   getCachedWatchProviders,
-} from "~/lib/tmdb/cached.server";
-import { calculateReelScore } from "./scoring";
-import { getScoresForTitle } from "./scores.server";
-import type { Episode, SeasonResponse, TitleDetail } from "./schemas";
+} from "./tmdb-cached";
+import { calculateReelScore } from "$lib/scoring";
+import { getScoresForTitle } from "./scores";
+import type { Episode, SeasonResponse, TitleDetail } from "$lib/schemas";
 
 /**
  * Streaming provider dedup: TMDB returns variants like "Paramount+",

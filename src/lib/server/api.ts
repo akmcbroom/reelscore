@@ -1,33 +1,24 @@
 import { Hono } from "hono";
-import { createRequestHandler } from "react-router";
 
-import { getFeedPage } from "~/lib/feed.server";
-import { feedQuerySchema } from "~/lib/schemas";
-import { getSeasonPayload, getTitleDetailPayload } from "~/lib/title.server";
+import { getFeedPage } from "./feed";
+import { getSeasonPayload, getTitleDetailPayload } from "./title";
+import { feedQuerySchema } from "$lib/schemas";
 
 /**
- * Worker entry point.
- *
- * Hono owns `/api/*` (JSON endpoints, Zod-validated). Any request that no API
- * route matches falls through to the React Router SSR handler. This mirrors the
- * tidbits pattern: one Worker, clean JSON API surface, SSR for everything else.
+ * The Hono API app — every JSON endpoint the client fetches lives here,
+ * Zod-validated. Mounted into SvelteKit at src/routes/api/[...paths]/+server.ts,
+ * which delegates matching requests to `api.fetch(request, platform.env)`.
+ * Page-level data loading calls the lib functions directly from `load` instead.
  */
-const requestHandler = createRequestHandler(
-  () => import("virtual:react-router/server-build"),
-  import.meta.env.MODE,
-);
+const api = new Hono<{ Bindings: Env }>();
 
-const app = new Hono<{ Bindings: Env }>();
-
-// --- API routes ---
-
-app.get("/api/health", (c) => c.json({ ok: true }));
+api.get("/api/health", (c) => c.json({ ok: true }));
 
 /**
  * Feed batches 2+ for the infinite scroll (batch 1 is SSR'd by the home
- * loader through the same getFeedPage).
+ * page's load through the same getFeedPage).
  */
-app.get("/api/feed", async (c) => {
+api.get("/api/feed", async (c) => {
   const parsed = feedQuerySchema.safeParse(
     Object.fromEntries(new URL(c.req.url).searchParams)
   );
@@ -45,7 +36,7 @@ app.get("/api/feed", async (c) => {
 });
 
 /** Title modal aggregate: details, credits, scores, rating, trailer, logo, providers. */
-app.get("/api/title/:id", async (c) => {
+api.get("/api/title/:id", async (c) => {
   const tmdbId = Number.parseInt(c.req.param("id"), 10);
   const mediaType = c.req.query("type") === "tv" ? "tv" : "movie";
   if (Number.isNaN(tmdbId)) {
@@ -65,7 +56,7 @@ app.get("/api/title/:id", async (c) => {
 });
 
 /** Season episode list for the TV seasons carousel. */
-app.get("/api/season/:id", async (c) => {
+api.get("/api/season/:id", async (c) => {
   const tvId = Number.parseInt(c.req.param("id"), 10);
   const seasonNumber = Number.parseInt(c.req.query("season") ?? "1", 10);
   if (Number.isNaN(tvId) || Number.isNaN(seasonNumber)) {
@@ -82,7 +73,4 @@ app.get("/api/season/:id", async (c) => {
   return c.json(season);
 });
 
-// Everything else → React Router SSR
-app.all("*", (c) => requestHandler(c.req.raw));
-
-export default app;
+export default api;
