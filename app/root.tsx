@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -5,34 +6,45 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { themeFromCookieHeader, applyTheme, type Theme } from "~/lib/theme";
 import "./app.css";
 
-export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  {
-    rel: "preconnect",
-    href: "https://fonts.gstatic.com",
-    crossOrigin: "anonymous",
-  },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
-  },
-];
+// Geist Variable is bundled via @fontsource-variable/geist (imported in app.css) —
+// no external font links needed.
+
+export function loader({ request }: Route.LoaderArgs) {
+  return { theme: themeFromCookieHeader(request.headers.get("Cookie")) };
+}
+
+/**
+ * Inline no-flash script: only "system" needs client resolution before first
+ * paint (SSR can't know the OS preference). Light/dark are rendered directly.
+ */
+const systemThemeScript = `(function(){if(document.documentElement.dataset.theme==="system"){document.documentElement.classList.toggle("dark",matchMedia("(prefers-color-scheme: dark)").matches);}})();`;
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const data = useRouteLoaderData<typeof loader>("root");
+  const theme: Theme = data?.theme ?? "dark";
+
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      data-theme={theme}
+      className={theme === "light" ? "" : "dark"}
+      suppressHydrationWarning
+    >
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <script dangerouslySetInnerHTML={{ __html: systemThemeScript }} />
       </head>
-      <body>
+      <body className="min-h-svh bg-background text-foreground antialiased">
         {children}
         <ScrollRestoration />
         <Scripts />
@@ -42,6 +54,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const data = useRouteLoaderData<typeof loader>("root");
+
+  // Track live OS theme changes while in "system" mode.
+  useEffect(() => {
+    if (data?.theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyTheme("system");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [data?.theme]);
+
   return <Outlet />;
 }
 

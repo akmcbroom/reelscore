@@ -9,6 +9,11 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "strict": true,
-    "noEmit": true
+    "noEmit": true,
+    // Path alias for shadcn CLI — must stay in sync with tsconfig.cloudflare.json
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./app/*"]
+    }
   }
 }
