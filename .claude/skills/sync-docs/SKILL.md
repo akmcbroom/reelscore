@@ -1,36 +1,40 @@
 ---
 name: sync-docs
-description: Audit recent code changes against CLAUDE.md and README.md to find documentation that is out of sync with the current codebase.
+description: Audit recent code changes against the docs/ set (PRD, ARCHITECTURE, ROADMAP) and README.md to find documentation that is out of sync with the current codebase.
 user-invocable: true
 disable-model-invocation: true
 ---
 
 # Sync Docs
 
-Audit CLAUDE.md and README.md against the current codebase to find documentation drift.
+Audit the `docs/` set and README.md against the current codebase to find
+documentation drift. CLAUDE.md is a slim index — details live in `docs/`.
 
 ## Workflow
 
-1. **Gather recent changes** — Run `git diff HEAD~5 --stat` and `git log --oneline -10` to see what files changed recently.
+1. **Gather recent changes** — Run `git diff HEAD~5 --stat` and
+   `git log --oneline -10` to see what files changed recently.
 
-2. **Read the spec** — Read `CLAUDE.md` fully, focusing on these sections that commonly drift:
-   - **Project Structure** — Does the file tree match what's actually in `src/`?
-   - **API Endpoints** — Does every file in `src/pages/api/` have a corresponding entry?
-   - **Features** (Title Card, Title Modal, Discovery Feed, etc.) — Do descriptions match current implementation?
-   - **Tech Stack** — Any new dependencies in `package.json` not documented?
-   - **Build Order** — Are completed steps marked or described accurately?
+2. **Read the docs**, focusing on the sections that commonly drift:
+   - `docs/ARCHITECTURE.md` — file map vs. actual `app/` tree; conventions;
+     data model vs. `app/db/schema.ts`; caching description vs.
+     `app/lib/scores.server.ts` + `cache.server.ts`
+   - `docs/PRD.md` — feature descriptions (feed, title card, modal, search,
+     auth, watchlist) vs. current implementation
+   - `docs/ROADMAP.md` — are completed tasks ticked? Is the NEXT task accurate?
+   - `CLAUDE.md` — commands and hard rules still correct?
 
-3. **Cross-reference** — For each section, verify against the actual codebase:
-   - `ls src/pages/api/` vs documented API endpoints
-   - `ls src/components/` vs documented components
-   - `ls src/lib/` vs documented lib files
-   - `cat package.json` dependencies vs documented tech stack
-   - Read key implementation files to verify feature descriptions are accurate
+3. **Cross-reference** against the actual codebase:
+   - Hono routes in `workers/app.ts` vs. documented API surface
+   - `ls app/components app/lib app/routes` vs. the ARCHITECTURE file map
+   - `package.json` dependencies vs. the ARCHITECTURE stack table (and each
+     new dep has a DECISIONS.md entry)
+   - Read key implementation files to verify feature descriptions
 
-4. **Check README.md** — Verify it reflects the same high-level features and hasn't fallen behind CLAUDE.md.
+4. **Check README.md** — high-level stack/feature claims still true.
 
-5. **Report findings** — Output a clear list of:
-   - What's out of sync (with specific CLAUDE.md line numbers)
+5. **Report findings** — a clear list of:
+   - What's out of sync (with file + section)
    - What needs to be added, updated, or removed
    - Suggested edits (but do NOT make changes — just report)
 
@@ -38,5 +42,5 @@ Audit CLAUDE.md and README.md against the current codebase to find documentation
 
 - This skill is **read-only** — do not edit any files, only report findings.
 - Focus on meaningful drift, not cosmetic differences.
-- Group findings by CLAUDE.md section for easy review.
+- Group findings by doc file for easy review.
 - If everything is in sync, say so clearly.
