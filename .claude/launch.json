@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Astro Dev Server",
+      "name": "ReelScore Dev Server",
       "runtimeExecutable": "/Users/themcbrooms/.nvm/versions/node/v22.18.0/bin/node",
-      "runtimeArgs": ["node_modules/.bin/astro", "dev"],
-      "port": 4321
+      "runtimeArgs": ["node_modules/.bin/react-router", "dev"],
+      "port": 5173
     }
   ]
 }

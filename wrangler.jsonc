@@ -1,0 +1,31 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "reelscore",
+	"compatibility_date": "2026-07-19",
+	"main": "./workers/app.ts",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "reelscore-db",
+			"database_id": "c7810fd5-3d57-477e-8320-5b1676661572",
+			"migrations_dir": "./drizzle"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SCORE_CACHE",
+			"id": "f02c7b82491b4223b58f9be5bedb09d2"
+		}
+	],
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"compatibility_flags": [
+		"nodejs_compat"
+	]
+}

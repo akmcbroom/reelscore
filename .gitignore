@@ -1,29 +1,17 @@
-# dependencies
-node_modules/
-
-# build output
-dist/
-.astro/
-
-# cloudflare
-.wrangler/
-.dev.vars
-
-# code coverage
-coverage/
-*.lcov
-
-# logs
-*.log
-
-# caches
-.eslintcache
-.cache
+.DS_Store
+.env
+/node_modules/
 *.tsbuildinfo
 
-# OS
-.DS_Store
+# React Router
+/.react-router/
+/build/
 
-# IDE
-.idea/
-.vscode/
+# Cloudflare
+.mf
+.wrangler
+.dev.vars*
+worker-configuration.d.ts
+
+!.dev.vars.example
+!.env.example
