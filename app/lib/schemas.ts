@@ -47,3 +47,69 @@ export const feedPageSchema = z.object({
 });
 
 export type FeedPage = z.infer<typeof feedPageSchema>;
+
+// --- Title detail (modal) ---
+
+const personSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  profilePath: z.string().nullable(),
+});
+
+/** Response shape of GET /api/title/:id — everything the modal renders. */
+export const titleDetailSchema = z.object({
+  tmdbId: z.number(),
+  mediaType: z.enum(["movie", "tv"]),
+  title: z.string(),
+  overview: z.string(),
+  releaseDate: z.string().nullable(),
+  /** Minutes — movie total or TV per-episode */
+  runtime: z.number().nullable(),
+  genres: z.array(z.object({ id: z.number(), name: z.string() })),
+  posterPath: z.string().nullable(),
+  backdropPath: z.string().nullable(),
+  /** Best English logo path, or null to fall back to text title */
+  logoPath: z.string().nullable(),
+  contentRating: z.string().nullable(),
+  /** YouTube video id of the best trailer */
+  trailerKey: z.string().nullable(),
+  score: z.number().nullable(),
+  sourceCount: z.number(),
+  breakdown: z.unknown().optional(),
+  directors: z.array(personSchema),
+  cast: z.array(personSchema.extend({ character: z.string() })),
+  /** Streaming providers — deduped by base service name, max 6 */
+  providers: z.array(
+    z.object({ id: z.number(), name: z.string(), logoPath: z.string() })
+  ),
+  /** TV only — Specials (season 0) filtered out */
+  seasons: z.array(
+    z.object({
+      seasonNumber: z.number(),
+      name: z.string(),
+      episodeCount: z.number(),
+    })
+  ),
+});
+
+export type TitleDetail = z.infer<typeof titleDetailSchema>;
+
+/** One episode in the season carousel (GET /api/season/:id). */
+export const episodeSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  overview: z.string(),
+  episodeNumber: z.number(),
+  seasonNumber: z.number(),
+  stillPath: z.string().nullable(),
+  airDate: z.string().nullable(),
+  runtime: z.number().nullable(),
+});
+
+export type Episode = z.infer<typeof episodeSchema>;
+
+export const seasonResponseSchema = z.object({
+  episodes: z.array(episodeSchema),
+});
+
+export type SeasonResponse = z.infer<typeof seasonResponseSchema>;

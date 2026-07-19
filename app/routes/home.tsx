@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 
 import type { Route } from "./+types/home";
 import { FeedGrid } from "~/components/feed-grid";
+import { TitleModal } from "~/components/title-modal";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import {
   Select,
@@ -24,6 +25,26 @@ export function meta({}: Route.MetaArgs) {
       content: "Watch what you like, not what the critics like.",
     },
   ];
+}
+
+/**
+ * Modal params (?title, ?mt) live in the same URL as the feed params — don't
+ * re-run the (expensive) feed loader when only the modal opened or closed,
+ * or the infinite-scroll state would reset and the feed would refetch.
+ */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: {
+  currentUrl: URL;
+  nextUrl: URL;
+  defaultShouldRevalidate: boolean;
+}) {
+  const feedParamsChanged = ["type", "sort"].some(
+    (key) => currentUrl.searchParams.get(key) !== nextUrl.searchParams.get(key)
+  );
+  return feedParamsChanged ? defaultShouldRevalidate : false;
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -47,8 +68,41 @@ const SORT_LABELS = {
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { feed, query } = loaderData;
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { items, hasMore, loading, loadMore } = useInfiniteFeed(feed, query);
+
+  // Modal state lives in the URL (?title=123&mt=movie) so links are shareable
+  // and the modal opens on page load. preventScrollReset keeps the feed
+  // position when opening/closing.
+  const modalId = Number.parseInt(searchParams.get("title") ?? "", 10);
+  const modalType = searchParams.get("mt") === "tv" ? "tv" : "movie";
+
+  const openTitle = useCallback(
+    (item: { tmdbId: number; mediaType: "movie" | "tv" }) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("title", String(item.tmdbId));
+          next.set("mt", item.mediaType);
+          return next;
+        },
+        { preventScrollReset: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const closeTitle = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("title");
+        next.delete("mt");
+        return next;
+      },
+      { preventScrollReset: true }
+    );
+  }, [setSearchParams]);
 
   // Tab/sort changes just update URL params — the loader re-runs and
   // useInfiniteFeed resets from the new batch 1. Defaults are omitted from
@@ -94,7 +148,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         hasMore={hasMore}
         loading={loading}
         onLoadMore={loadMore}
+        onSelect={openTitle}
       />
+
+      {!Number.isNaN(modalId) && (
+        <TitleModal tmdbId={modalId} mediaType={modalType} onClose={closeTitle} />
+      )}
     </main>
   );
 }
