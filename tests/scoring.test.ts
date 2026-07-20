@@ -110,6 +110,37 @@ describe("parseRatings", () => {
     expect(result.map((r) => r.source)).toEqual(["imdb", "tomatoesaudience", "metacriticuser"]);
   });
 
+  it("aliases MDbList's 'popcorn' key to tomatoesaudience", () => {
+    // MDbList delivers the RT audience score (Popcornmeter) as "popcorn" —
+    // see DECISIONS 2026-07-19; the critic "tomatoes" key must stay ignored.
+    const ratings: MDbListRating[] = [
+      { source: "imdb", value: 7.2, score: 72, votes: 190005 },
+      { source: "tomatoes", value: 65, score: 65, votes: 358 }, // critic — ignored
+      { source: "popcorn", value: 90, score: 90, votes: 4711 },
+    ];
+
+    const result = parseRatings(ratings);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.source)).toEqual(["imdb", "tomatoesaudience"]);
+    expect(result[1]!.normalizedScore).toBe(90);
+    expect(result[1]!.votes).toBe(4711);
+  });
+
+  it("dedupes if both 'popcorn' and 'tomatoesaudience' keys appear", () => {
+    const ratings: MDbListRating[] = [
+      { source: "tomatoesaudience", value: 88, score: 88, votes: 1000 },
+      { source: "popcorn", value: 90, score: 90, votes: 4711 },
+    ];
+
+    const result = parseRatings(ratings);
+
+    // First entry with usable data wins
+    expect(result).toHaveLength(1);
+    expect(result[0]!.source).toBe("tomatoesaudience");
+    expect(result[0]!.normalizedScore).toBe(88);
+  });
+
   it("excludes sources with zero values (no data)", () => {
     const ratings: MDbListRating[] = [
       { source: "imdb", value: 7.5, score: 75, votes: 10000 },
@@ -275,14 +306,14 @@ describe("calculateReelScore", () => {
   });
 
   it("applies -1 reliability adjustment for exactly 2 sources", () => {
-    // imdb (0.95) at 90 + tmdb (0.80) at 80, votes = 1000
-    // Weighted avg: (90×0.95 + 80×0.80) × vf / (0.95 + 0.80) × vf ≈ 85.4
-    // Reliability: sourceCount=2 → -1 → round(84.4) = 84
+    // imdb (1.05) at 90 + tmdb (0.80) at 80, votes = 1000
+    // Weighted avg: (90×1.05 + 80×0.80) × vf / (1.05 + 0.80) × vf ≈ 85.7
+    // Reliability: sourceCount=2 → -1 → round(84.7) = 85
     const scores = [makeScore("imdb", 90), makeScore("tmdb", 80)];
 
     const result = calculateReelScore(scores);
 
-    expect(result.score).toBe(84);
+    expect(result.score).toBe(85);
     expect(result.sourceCount).toBe(2);
     expect(result.hasEnoughSources).toBe(true);
   });

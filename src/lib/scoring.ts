@@ -29,13 +29,14 @@ export const SCORE_RANGES = {
 /**
  * Source-specific base weights for the weighted average.
  * Reflects signal quality and audience coverage per source.
- * tomatoesaudience is highest (strongest verified audience signal);
- * metacriticuser is lowest (thinnest coverage).
- * See CLAUDE.md Score Engine > Base ReelScore Calculation.
+ * Rebalanced 2026-07-19 via owner-authorized unlock (DECISIONS): RT audience
+ * lowered from 1.40 — MDbList delivers the unverified Popcornmeter, a
+ * percentage-positive (not mean-based) metric and the most review-bomb-prone
+ * source; imdb raised from 0.95 — largest samples, fraud-dampened means.
  */
 export const SOURCE_BASE_WEIGHTS: Record<AudienceSource, number> = {
-  tomatoesaudience: 1.40, // Strongest verified audience signal
-  imdb:             0.95, // Large sample, some known skew
+  tomatoesaudience: 1.15, // Strong audience signal, but %-positive and unverified
+  imdb:             1.05, // Largest samples, fraud-dampened weighted mean
   letterboxd:       1.05, // High-quality cinephile signal
   trakt:            0.85, // Engaged active watchers
   tmdb:             0.80, // Good coverage, broad audience

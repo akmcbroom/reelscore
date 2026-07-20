@@ -52,12 +52,16 @@ inaccurate — see DECISIONS 2026-07-19.
 
    | Source             | Base weight | Rationale |
    |--------------------|-------------|-----------|
-   | `tomatoesaudience` | 1.40        | Strongest verified audience signal |
+   | `tomatoesaudience` | 1.15        | Strong audience signal, but %-positive and unverified (Popcornmeter) |
+   | `imdb`             | 1.05        | Largest samples, fraud-dampened weighted mean |
    | `letterboxd`       | 1.05        | High-quality cinephile signal |
-   | `imdb`             | 0.95        | Large sample, known skew |
    | `trakt`            | 0.85        | Engaged watchers |
    | `tmdb`             | 0.80        | Good coverage |
    | `metacriticuser`   | 0.75        | Thinnest coverage |
+
+   (Rebalanced 2026-07-19 via owner-authorized unlock — RT audience down from
+   1.40, IMDb up from 0.95; see DECISIONS. Still subject to the post-launch
+   calibration study, roadmap 7.5.)
 
 4. Weighted average = `Σ(normalized × effective_weight) / Σ(effective_weights)`.
 5. Apply **reliability adjustment** (−3 to +3) based on source count, vote

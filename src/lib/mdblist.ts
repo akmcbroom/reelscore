@@ -44,9 +44,11 @@ export interface MDbListResponse {
 }
 
 /**
- * The 6 audience score sources we care about.
+ * The 6 audience score sources we care about (canonical keys).
  * MDbList may return other sources — we filter to only these.
- * Note: "tomatoesaudience" is the MDbList key for the RT Audience Score (was "popcorn" in older API versions).
+ * Note: MDbList delivers the RT Audience Score (Popcornmeter) under the key
+ * "popcorn"; parseRatings aliases it to our canonical "tomatoesaudience"
+ * (DECISIONS 2026-07-19 — the reverse assumption dropped RT from all scores).
  */
 export const AUDIENCE_SOURCES = [
   "imdb",
@@ -232,21 +234,33 @@ export async function fetchMDbListScores(
  */
 export function parseRatings(ratings: MDbListRating[]): NormalizedScore[] {
   const normalized: NormalizedScore[] = [];
+  const seen = new Set<AudienceSource>();
 
   for (const rating of ratings) {
+    // MDbList sends the RT audience score (Popcornmeter) as "popcorn" —
+    // alias to the canonical key before filtering.
+    const source = (
+      rating.source === "popcorn" ? "tomatoesaudience" : rating.source
+    ) as AudienceSource;
+
     // Only process our 6 audience sources
-    if (!AUDIENCE_SOURCES.includes(rating.source as AudienceSource)) {
+    if (!AUDIENCE_SOURCES.includes(source)) {
       continue;
     }
 
+    // If MDbList ever sends both "popcorn" and "tomatoesaudience", keep the
+    // first entry that carries usable data.
+    if (seen.has(source)) continue;
+
     // Prefer MDbList's pre-normalized score (0-100), fall back to manual normalization
-    const score = rating.score ?? normalizeScore(rating.value, rating.source);
+    const score = rating.score ?? normalizeScore(rating.value, source);
 
     // Skip sources with no data (raw value was 0 or score is null/0)
     if (score === null || score === 0) continue;
 
+    seen.add(source);
     normalized.push({
-      source: rating.source as AudienceSource,
+      source,
       rawValue: rating.value,
       normalizedScore: Math.round(score),
       votes: rating.votes,

@@ -102,3 +102,12 @@
   factually wrong. Fix: alias `popcorn` → `tomatoesaudience` at parse time
   (mdblist.ts — outside the locked file), plus owner-authorized weight
   rebalance (next entry).
+- **2026-07-19** OWNER-AUTHORIZED scoring.ts unlock (one-time): base weights
+  rebalanced in the same change that reconnects RT audience —
+  `tomatoesaudience` 1.40 → 1.15 (it's the unverified Popcornmeter: a
+  percentage-positive metric that runs systematically hot vs mean-based
+  scores, and the most review-bomb-prone source), `imdb` 0.95 → 1.05 (largest
+  samples, fraud-dampened weighted means). Other weights unchanged. Math
+  re-LOCKED after this change. One weight-dependent test expectation updated
+  (recomputed by hand, 84 → 85); two parseRatings alias tests added (76
+  total). Weights remain subject to the roadmap 7.5 calibration study.
