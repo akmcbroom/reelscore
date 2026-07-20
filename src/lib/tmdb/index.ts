@@ -3,7 +3,7 @@
  *
  * Deliberately does NOT re-export cached.server.ts — that module touches the
  * KV binding and must stay server-only. Import it directly as
- * `~/lib/tmdb/cached.server` from loaders/Hono handlers.
+ * `$lib/server/tmdb-cached` from loads/Hono handlers.
  */
 
 export * from "./types";

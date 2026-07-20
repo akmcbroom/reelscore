@@ -50,7 +50,8 @@ src/
     ├── theme.ts           cookie theme helpers
     ├── tmdb/              TMDB client: types, client, discover, details, media, search, index
     ├── components/        score-lip, title-card, feed-grid, title-modal, header, theme-toggle
-    │   └── ui/            shadcn-svelte components (owned source, edit freely)
+    │   └── ui/            shadcn-svelte components (owned source, edit freely;
+    │                      input + label currently unused — staged for Phase 4 auth forms)
     └── server/            SvelteKit-enforced server-only boundary
         ├── api.ts         the Hono app (all /api/* routes)
         ├── feed.ts        getFeedPage — one Discover query per (type, sort) view

@@ -1,5 +1,20 @@
 {
 	"extends": "./.svelte-kit/tsconfig.json",
+	// exclude overrides the generated list wholesale — keep its entries and add
+	// the adapter build output, which otherwise gets type-checked (checkJs)
+	// after any `npm run build`
+	"exclude": [
+		"node_modules/**",
+		".svelte-kit/cloudflare",
+		".svelte-kit/cloudflare-tmp",
+		".svelte-kit/output",
+		"src/service-worker.js",
+		"src/service-worker/**/*.js",
+		"src/service-worker.ts",
+		"src/service-worker/**/*.ts",
+		"src/service-worker.d.ts",
+		"src/service-worker/**/*.d.ts"
+	],
 	"compilerOptions": {
 		"rewriteRelativeImportExtensions": true,
 		"allowJs": true,

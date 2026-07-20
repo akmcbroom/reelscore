@@ -1,7 +1,7 @@
 /**
  * KV-cached wrappers around the TMDB fetchers.
  * Server-only (touches the SCORE_CACHE KV binding). NOT re-exported from the
- * barrel index — import directly as `~/lib/tmdb/cached.server`.
+ * barrel index — import directly as `$lib/server/tmdb-cached`.
  */
 
 import { kvGet, kvPut, getCacheTtl } from "./cache";

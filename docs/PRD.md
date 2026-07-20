@@ -38,7 +38,7 @@ Critic scores (`tomatoes`, `metacritic`, …) are explicitly ignored.
 
 1. Require **minimum 2 valid sources**.
 2. Normalize each source to 0–100 (0–10 scales ×10, 0–5 scale ×20 — implemented
-   in `app/lib/scoring.ts`).
+   in `src/lib/scoring.ts`).
 3. Apply **source-specific base weights** × **vote_factor** (log-scaled,
    bounded 0.85–1.10):
 
@@ -55,7 +55,7 @@ Critic scores (`tomatoes`, `metacritic`, …) are explicitly ignored.
 5. Apply **reliability adjustment** (−3 to +3) based on source count, vote
    support, and freshness → **Base ReelScore** (clamped 0–100).
 
-**The math in `app/lib/scoring.ts` is LOCKED.** It ports byte-identical from the
+**The math in `src/lib/scoring.ts` is LOCKED.** It ports byte-identical from the
 Astro app and must never change without an explicit owner request. Vitest
 coverage is mandatory.
 
