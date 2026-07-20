@@ -90,3 +90,15 @@
   Resolution: no change now — validate empirically post-launch (source-vs-
   consensus deviation; later, which source best predicts Phase 6 thumbs) and
   revisit via explicit owner unlock only if the data agrees (roadmap 7.5).
+- **2026-07-19** DISCOVERY (owner spotted via Avatar: Fire and Ash): MDbList
+  returns the RT audience score under key `popcorn`, NOT `tomatoesaudience`
+  (the mdblist.ts comment claiming the opposite was stale from the Astro era).
+  parseRatings has therefore silently dropped RT audience from EVERY score —
+  all ReelScores to date used at most 5 sources, with the top-weighted (1.40)
+  source unplugged. Verified live against both MDbList lookup paths (tmdb-id
+  and imdb-id; identical payloads). Additional finding: `popcorn` is the
+  all-audience Popcornmeter, not RT's verified-ticket score, so the
+  "strongest verified audience signal" rationale for the 1.40 weight was
+  factually wrong. Fix: alias `popcorn` → `tomatoesaudience` at parse time
+  (mdblist.ts — outside the locked file), plus owner-authorized weight
+  rebalance (next entry).

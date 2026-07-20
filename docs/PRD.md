@@ -26,13 +26,21 @@ All 6 audience-only scores come via the **MDbList API** (paid plan). Exact keys:
 | # | Source                         | MDbList key        | Raw scale |
 |---|--------------------------------|--------------------|-----------|
 | 1 | IMDb User Rating               | `imdb`             | 0–10      |
-| 2 | Rotten Tomatoes Audience Score | `tomatoesaudience` | 0–100     |
+| 2 | Rotten Tomatoes Audience Score | `popcorn`¹         | 0–100     |
 | 3 | Metacritic User Score          | `metacriticuser`   | 0–10      |
 | 4 | Letterboxd                     | `letterboxd`       | 0–5       |
 | 5 | Trakt                          | `trakt`            | 0–100     |
 | 6 | TMDB Audience Score            | `tmdb`             | 0–100     |
 
 Critic scores (`tomatoes`, `metacritic`, …) are explicitly ignored.
+
+¹ **2026-07-19 discovery:** MDbList delivers the RT audience score under the
+key `popcorn` (RT's "Popcornmeter" — the all-audience score, NOT the
+verified-ticket score), not `tomatoesaudience` as previously believed. The
+parser aliases `popcorn` → `tomatoesaudience` internally; before the alias
+fix, RT audience was silently absent from every computed score (max 5
+sources). The "verified audience" rationale for its top weight was therefore
+inaccurate — see DECISIONS 2026-07-19.
 
 ### Base ReelScore calculation (objective, same for everyone)
 
