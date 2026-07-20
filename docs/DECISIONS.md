@@ -83,3 +83,10 @@
 - **2026-07-19** Expected-features backlog logged as Phase 8 (provider
   filtering, search filters, genre browse, More Like This, person pages,
   watched history, /settings); old Phase 8 deferred list is now Phase 9.
+- **2026-07-19** Source weights reviewed and CONFIRMED as-is pre-launch
+  (owner). Flagged concern: `tomatoesaudience` 1.40 is the most aggressive
+  weight on a percentage-positive (not mean-based) and review-bomb-prone
+  metric, while `imdb` 0.95 may be underweighted given its sample sizes.
+  Resolution: no change now — validate empirically post-launch (source-vs-
+  consensus deviation; later, which source best predicts Phase 6 thumbs) and
+  revisit via explicit owner unlock only if the data agrees (roadmap 7.5).

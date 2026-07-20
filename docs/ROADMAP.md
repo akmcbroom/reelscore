@@ -102,6 +102,9 @@ MVP line is the end of Phase 6. **Do not deploy before parity** (live site!).
 - [ ] 7.3 Personalized swing (±9) + Scored for You row + public "Why this
       score?" explainer (general terms only — base math stays private)
 - [ ] 7.4 Profile page: preference management
+- [ ] 7.5 Weight calibration study (DECISIONS 2026-07-19): measure per-source
+      deviation from consensus + thumbs predictiveness on live data; any
+      weight change requires explicit owner unlock of scoring.ts
 
 ## Phase 8 — Expected-features backlog (post-MVP, see PRD)
 
