@@ -24,6 +24,7 @@
 </script>
 
 <script lang="ts">
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { getSourceLabel } from '$lib/scoring';
 	import type { ScoreBreakdown } from '$lib/mdblist';
 
@@ -34,7 +35,7 @@
 		tmdbId: number;
 		isUnreleased?: boolean;
 		sourceCount?: number;
-		/** Full score math — renders a hover tooltip in dev builds only */
+		/** Full score math — renders the dev-only score-receipt tooltip */
 		breakdown?: ScoreBreakdown;
 		/** "card" (70×23) or "modal" (larger, for the title modal header) */
 		size?: 'card' | 'modal';
@@ -50,22 +51,9 @@
 		size === 'modal' ? { width: 96, height: 32, fontSize: 17 } : { width: 70, height: 23, fontSize: 15 }
 	);
 
-	const tooltip = $derived.by(() => {
-		let text = isUnreleased
-			? 'Not yet released'
-			: hasScore
-				? `ReelScore: ${score}`
-				: 'Not enough ratings';
-		if (import.meta.env.DEV && breakdown) {
-			const perSource = breakdown.sources
-				.map((s) => `${getSourceLabel(s.source)}: ${s.normalizedScore}`)
-				.join(' | ');
-			text = hasScore
-				? `ReelScore: ${score} (${sourceCount} sources)\n${perSource}\nweighted avg ${breakdown.weightedAverage}, reliability ${breakdown.reliabilityAdjustment >= 0 ? '+' : ''}${breakdown.reliabilityAdjustment}`
-				: `Insufficient sources (${sourceCount}/2)\n${perSource}`;
-		}
-		return text;
-	});
+	const tooltip = $derived(
+		isUnreleased ? 'Not yet released' : hasScore ? `ReelScore: ${score}` : 'Not enough ratings'
+	);
 </script>
 
 <!--
@@ -73,8 +61,8 @@
 	visual (DECISIONS 2026-07-19). A gradient tab with concave curves on both
 	sides, sitting on the poster/backdrop top edge.
 -->
-<svg width={dims.width} height={dims.height} viewBox="0 0 84 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-	<title>{tooltip}</title>
+{#snippet lip()}
+	<svg width={dims.width} height={dims.height} viewBox="0 0 84 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 	<defs>
 		<linearGradient id={gradId} x1="0" y1="0" x2="0" y2="28" gradientUnits="userSpaceOnUse">
 			<stop offset="0%" stop-color={tier.from} />
@@ -112,4 +100,44 @@
 			{hasScore ? score : '—'}
 		</text>
 	{/if}
-</svg>
+	</svg>
+{/snippet}
+
+{#if import.meta.env.DEV && breakdown}
+	<!-- Dev-only score receipt — this branch is compiled out of prod builds,
+		so the base math (weights, factors) is never shipped publicly. -->
+	<Tooltip.Provider delayDuration={150}>
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				{#snippet child({ props })}
+					<!-- span, not the default button — the lip sits inside the card's <button> -->
+					<span class="block" role="img" aria-label={tooltip} {...props}>{@render lip()}</span>
+				{/snippet}
+			</Tooltip.Trigger>
+			<Tooltip.Content side="top" class="px-3 py-2">
+				<div class="grid grid-cols-[auto_1fr_auto] gap-x-3 gap-y-0.5 font-mono text-[11px] tabular-nums">
+					{#each breakdown.sources as s (s.source)}
+						<span>{getSourceLabel(s.source)}</span>
+						<span class="text-right opacity-50">×{s.effectiveWeight.toFixed(2)}</span>
+						<span class="text-right">{s.normalizedScore}</span>
+					{/each}
+					<span class="border-background/30 col-span-3 my-1 border-t"></span>
+					<span>weighted avg</span>
+					<span></span>
+					<span class="text-right">{breakdown.weightedAverage}</span>
+					<span>reliability</span>
+					<span></span>
+					<span class="text-right">
+						{breakdown.reliabilityAdjustment >= 0 ? '+' : ''}{breakdown.reliabilityAdjustment}
+					</span>
+					<span class="border-background/30 col-span-3 my-1 border-t"></span>
+					<span class="font-semibold">ReelScore</span>
+					<span class="text-right opacity-50">{sourceCount} src</span>
+					<span class="text-right font-semibold">{hasScore ? score : '—'}</span>
+				</div>
+			</Tooltip.Content>
+		</Tooltip.Root>
+	</Tooltip.Provider>
+{:else}
+	<span class="block" title={tooltip} role="img" aria-label={tooltip}>{@render lip()}</span>
+{/if}
