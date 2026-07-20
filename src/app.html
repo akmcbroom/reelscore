@@ -1,9 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="%reelscore.theme.class%" data-theme="%reelscore.theme%">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			// No-flash theme resolution: only "system" needs client-side work
+			// before first paint (the server can't know the OS preference).
+			// Light/dark are rendered directly by the handle hook.
+			if (document.documentElement.dataset.theme === 'system') {
+				document.documentElement.classList.toggle(
+					'dark',
+					matchMedia('(prefers-color-scheme: dark)').matches
+				);
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
