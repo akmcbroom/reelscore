@@ -36,7 +36,7 @@ and (post-MVP) per-user personalization. Live at getreelscore.com.
   hand-edit the database or generated SQL).
 - **npm, never bun** (bun's ws hangs). Node 22 via nvm (`nvm use 22`).
 - **NO deploys before parity** — `npm run deploy` replaces the live site at
-  getreelscore.com. Parity deploy is ROADMAP item 6.4, owner go-ahead required.
+  getreelscore.com. Parity deploy is ROADMAP item 6.5, owner go-ahead required.
 - The owner is a beginner developer: explain terminal commands before running
   them, explain errors before fixing them, confirm destructive actions.
 - Keep this file an index — details belong in `docs/`, not here.

@@ -2,7 +2,7 @@
  * Cache helpers.
  *
  * KV (binding SCORE_CACHE) holds raw TMDB API responses and per-user refresh
- * cooldown keys. Score payloads live in D1 (see scores.server.ts) — the TTL
+ * cooldown keys. Score payloads live in D1 (see ./scores.ts) — the TTL
  * tier functions here are shared policy used by both stores.
  * See docs/ARCHITECTURE.md "Caching architecture".
  */

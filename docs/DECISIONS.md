@@ -61,3 +61,25 @@
   react/react-dom/react-router/radix-ui/lucide-react/next-themes/isbot OUT.
 - **2026-07-19** `wrangler types` output moved to `src/worker-configuration.d.ts`
   so svelte-check sees the Env/binding globals.
+- **2026-07-19** Base-score math stays PRIVATE in production (owner decision —
+  weights/vote factors/reliability are the secret sauce). Public "Why this
+  score?" (Phase 7) explains only the personalization swing in general terms
+  ("because you like Horror and John Carpenter"). Dev-only hover breakdown on
+  the score lip retained, via HTML title attr (SVG <title> was unreliable).
+- **2026-07-19** Feed performance promoted into the MVP as roadmap 5.0:
+  deferred score hydration (feed never blocks on MDbList), sort-key merge for
+  "All" (the 1:1 zipper ranked items regardless of relative popularity; PRD
+  had promised a popularity interleave that was never implemented — resolution
+  is a merge by each lens's own sort key), sentinel prefetch margin, and
+  MDbList rate-limit tuning. Root cause: cold batches serialize ~40-76 MDbList
+  fetches at 2-concurrent/500ms ≈ 10-19s blocking both SSR and scroll batches.
+- **2026-07-19** PRD §2 corrected to match code: 2 Discover pages per active
+  media type per batch (not 3 pages/~60 items — the LCM-of-grid-columns
+  rationale was void anyway since the anime filter and dedup make batch sizes
+  inexact). Code wins; 3 pages would worsen the cold-score fanout by 50%.
+- **2026-07-19** Launch-readiness block added as roadmap 6.4 (title permalink
+  pages for SEO, empty/error states, legal pages + account deletion, password
+  reset/email-provider decision); parity deploy renumbered 6.4 → 6.5.
+- **2026-07-19** Expected-features backlog logged as Phase 8 (provider
+  filtering, search filters, genre browse, More Like This, person pages,
+  watched history, /settings); old Phase 8 deferred list is now Phase 9.

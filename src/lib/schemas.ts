@@ -1,5 +1,5 @@
 /**
- * Zod contracts shared by the Hono API and the React client.
+ * Zod contracts shared by the Hono API and the Svelte client.
  * Every /api/* route validates its inputs with these schemas; response types
  * are inferred so the client and server can never drift.
  */
@@ -7,6 +7,7 @@
 import { z } from "zod";
 
 import { FEED_SORTS } from "./tmdb/discover";
+import { MAX_FEED_PAGES } from "./feed.constants";
 
 // --- Feed ---
 
@@ -14,8 +15,8 @@ import { FEED_SORTS } from "./tmdb/discover";
 export const feedQuerySchema = z.object({
   type: z.enum(["all", "movie", "tv"]).default("all"),
   sort: z.enum(FEED_SORTS).default("popular"),
-  /** Feed batch number (1-based). Capped at 10 — see docs/PRD.md §2. */
-  page: z.coerce.number().int().min(1).max(10).default(1),
+  /** Feed batch number (1-based). Capped — see docs/PRD.md §2. */
+  page: z.coerce.number().int().min(1).max(MAX_FEED_PAGES).default(1),
 });
 
 export type FeedQuery = z.infer<typeof feedQuerySchema>;

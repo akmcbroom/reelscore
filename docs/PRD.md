@@ -67,9 +67,12 @@ coverage is mandatory.
   in theaters/airing = 24h; released < 6 months = 3 days; older = 7 days.
 - **Manual refresh** (auth required, post-parity): one refresh per title per
   user per 15 minutes, enforced via KV cooldown key; 429 on cooldown.
-- **Dev-mode transparency:** in dev builds, the score badge shows the full
-  breakdown (per-source normalized scores, weights, vote factors, reliability
-  adjustment). Never exposed in production.
+- **Dev-mode transparency:** in dev builds, hovering the score lip shows the
+  full breakdown as a tooltip (per-source normalized scores, weighted average,
+  reliability adjustment). Never exposed in production — the base-score math
+  (weights, vote factors, reliability rules) stays private. The public-facing
+  "Why this score?" explainer (post-MVP, see Personalization) describes only
+  the personalization swing in general terms.
 
 ## 2. Discovery feed (home page)
 
@@ -80,8 +83,9 @@ coverage is mandatory.
   - Media tabs: All / Movies / TV Shows (`?type=`)
   - Sort lens: Popular / Top Rated / New Releases / Upcoming (`?sort=`)
 - Each (type, sort) pair maps to exactly one Discover query. "All" runs the
-  movie + TV queries and interleaves by popularity (Upcoming/New Releases lens:
-  movie-oriented; TV uses air-date equivalents).
+  movie + TV queries and merges them by the lens's own sort key (popularity /
+  vote average / release date) into one unified ranking (Upcoming/New Releases:
+  TV uses air-date equivalents).
 - **Tuned content filters (all queries):** `certification_country=US` (+
   `certification.lte=R` for movies), `include_adult=false`, monetization
   `flatrate|free|ads` where watch_region is used, vote-count floors, TV
@@ -89,11 +93,19 @@ coverage is mandatory.
   TV. **Anime filter:** `original_language === "ja"` AND Animation genre (16)
   excluded globally. No language filter — international titles with US
   distribution appear naturally.
-- **Pagination:** native TMDB pages; each scroll batch fetches 3 TMDB pages
-  (~60 items — LCM of grid column counts, keeps rows full at all breakpoints).
-  Infinite scroll via IntersectionObserver sentinel, capped at 10 batches.
-  A client-side `Set` of seen IDs drops duplicates caused by popularity shifts
-  between fetches (reset when type/sort changes).
+- **Pagination:** native TMDB pages; each scroll batch fetches 2 TMDB pages
+  per active media type (~80 items on All, ~40 on Movies/TV — the anime filter
+  and dedup make counts inexact, so no page count keeps grid rows exactly
+  full). Infinite scroll via IntersectionObserver sentinel with a prefetch
+  margin (~1.5 viewports, so the next batch loads before the user hits the
+  bottom), capped at 10 batches. A client-side `Set` of seen IDs drops
+  duplicates caused by popularity shifts between fetches (reset when type/sort
+  changes).
+- **Deferred score hydration (MVP):** feed responses never block on MDbList.
+  Cards render immediately from TMDB data plus whatever the D1 cache holds
+  (stale allowed); missing/stale scores are fetched after initial render and
+  fill the score lips in place (neutral lip until then). Applies to SSR batch 1
+  and scroll batches alike.
 - Clicking a card opens the title modal inline — no navigation, scroll
   position preserved.
 
@@ -126,7 +138,8 @@ can be shared and opens on page load.
 ## 5. Search (MVP)
 
 Header search input, debounced. TMDB search + batched scores, results rendered
-as title cards. `?q=` URL param.
+as title cards. `?q=` URL param. Search filters (type/genre/year chips) are in
+the expected-features backlog, not the MVP.
 
 ## 6. Auth (MVP)
 
@@ -142,6 +155,19 @@ personalization.
 - Thumbs up/down on titles (modal). Ratings feed the post-MVP preference
   profile; they do not alter the public score.
 
+## 8. Launch readiness (MVP, pre-parity-deploy)
+
+- **Title permalink pages:** SSR `/title/[id]` routes rendering the full title
+  detail (SEO + crawlable sharing). In-app, cards still open the modal over the
+  feed; the permalink is what search engines and cold shared links get.
+- **Empty/error states:** defined states for TMDB unavailable (feed error),
+  zero search results, empty watchlist, and score-less titles. MDbList down =
+  cached scores still render (existing behavior).
+- **Legal:** privacy policy + terms pages; account deletion available once
+  auth exists.
+- **Password reset decision (owner):** email/password auth needs an email
+  provider for resets — pick one, or explicitly accept "no reset at MVP."
+
 ---
 
 ## Post-MVP spec (preserved — build after the MVP line)
@@ -155,6 +181,10 @@ personalization.
   TMDB metadata), manual profile edits (start at 1.0).
 - **Swing:** genres ±1 each (max 3 matches → ±3); people ±2 each (max 3 → ±6);
   total ±9 added to Base for logged-in users. Deterministic and transparent.
+- **Public "Why this score?" explainer:** an info icon next to a personalized
+  score opens a small modal with a general explanation ("Boosted because you
+  like Horror, John Carpenter, and Kurt Russell") — matched preferences and
+  swing direction only, never the base weights or source math.
 
 ### Onboarding
 
@@ -171,10 +201,18 @@ Horizontal row atop home for onboarded users. Candidates from TMDB Discover
 each), deduped, minus rated/hidden. Score all, keep personalized ≥ 70, sort by
 personalization delta then Base. 20 max. Per-user KV cache, 1h TTL.
 
+### Expected-features backlog (post-MVP, before "someday")
+
+Standard movie-app features users expect, ordered roughly by value:
+provider filtering ("what's on my services" — Discover `with_watch_providers`),
+search filters (type/genre/year), genre browsing, "More like this" row in the
+modal (TMDB recommendations), person pages (actor/director filmography — also
+feeds personalization), watched history ("mark as watched" alongside
+watchlist), unified `/settings` page (theme + account + preferences).
+
 ### Deferred (unscheduled)
 
 In-app notifications (score change ≥5, streaming availability), hidden titles,
 native ad slots (every 9th grid cell, "Sponsored" badge, provider-agnostic),
 premium ad-free tier, custom visual identity pass, blended-feed experiment
-(only if the sort-lens feed proves worse), deferred score hydration (SSR cards
-instantly, stream scores in).
+(only if the sort-lens feed proves worse).

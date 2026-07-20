@@ -1,6 +1,7 @@
 /**
- * Feed constants shared by server (feed.server.ts) and client
- * (use-infinite-feed) — kept dependency-free so the client bundle stays clean.
+ * Feed constants shared by server (server/feed.ts) and client
+ * (+page.svelte infinite scroll) — kept dependency-free so the client
+ * bundle stays clean.
  */
 
 /** Feed batches are capped at 10 to prevent DOM bloat — see docs/PRD.md §2. */

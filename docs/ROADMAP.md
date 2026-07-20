@@ -66,33 +66,53 @@ MVP line is the end of Phase 6. **Do not deploy before parity** (live site!).
 - [ ] 4.2 /login + /signup as SvelteKit form actions with use:enhance
       (progressive enhancement), account menu in header, sign-out
 
-## Phase 5 — Search
+## Phase 5 — Feed performance & search
 
+- [ ] 5.0 Feed performance (promoted from Phase 8 — PRD §2): deferred score
+      hydration (feed never blocks on MDbList; cards render with cached
+      scores, misses fill in after), sort-key merge for "All" (replaces 1:1
+      interleave), sentinel prefetch margin (~1.5 viewports), MDbList
+      rate-limit tuning (verify paid-plan limits; 2-concurrent/500ms is a
+      guess)
 - [ ] 5.1 GET /api/search (TMDB search + batched scores) + debounced header
       search UI
 
-## Phase 6 — Watchlist & ratings  ← MVP line
+## Phase 6 — Watchlist, ratings & launch  ← MVP line
 
 - [ ] 6.1 Schema + migration: user_watchlist, user_title_ratings
 - [ ] 6.2 Watchlist: POST/DELETE /api/watchlist, toggle on card+modal,
       /watchlist route
 - [ ] 6.3 Ratings: thumbs up/down in modal, POST/DELETE /api/ratings
-- [ ] 6.4 Parity deploy: smoke test then `npm run deploy` (replaces live site —
-      owner go-ahead required)
+- [ ] 6.4 Launch readiness (PRD §8): SSR /title/[id] permalink pages,
+      empty/error states, privacy + terms + account deletion,
+      password-reset/email-provider decision (owner)
+- [ ] 6.5 Parity deploy (owner go-ahead required — replaces live site):
+      verify how getreelscore.com is attached (old Astro: Worker vs Pages);
+      `wrangler d1 export` backup, then `db:migrate:remote` (migration 0000
+      drops the old score_cache_metadata table); production secrets via
+      `wrangler secret put` (TMDB/MDBLIST/BETTER_AUTH_*); smoke-test a
+      `wrangler versions upload` preview URL (all tabs×lenses, modal, auth
+      round trip, search, cold-view TTFB, theme, no dev breakdown in prod);
+      then deploy + domain verification
 
 ## Phase 7 — Personalization (post-MVP)
 
 - [ ] 7.1 user_preferences schema + confidence-weight engine (tested)
 - [ ] 7.2 Onboarding flow (4 steps, minimums, genre-aware title rating)
-- [ ] 7.3 Personalized swing (±9) + Scored for You row
+- [ ] 7.3 Personalized swing (±9) + Scored for You row + public "Why this
+      score?" explainer (general terms only — base math stays private)
 - [ ] 7.4 Profile page: preference management
 
-## Phase 8 — Deferred (not scheduled)
+## Phase 8 — Expected-features backlog (post-MVP, see PRD)
+
+- Provider filtering ("what's on my services"), search filters, genre
+  browsing, "More like this", person pages, watched history, /settings page
+
+## Phase 9 — Deferred (not scheduled)
 
 - In-app notifications (score change ≥5, streaming availability)
 - Hidden titles; manual score refresh w/ 15-min cooldown
 - Ads (every 9th cell, provider-agnostic) + premium ad-free tier
 - Custom visual identity pass (beyond the score lip)
 - Blended-feed experiment (only if sort-lens feed proves worse)
-- Deferred score hydration (SSR cards instantly, stream scores in)
 - Google/Apple OAuth
