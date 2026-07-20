@@ -5,7 +5,10 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** Title modal target — set by shallow-routing pushState on the feed */
+			showTitle?: { tmdbId: number; mediaType: "movie" | "tv" };
+		}
 		interface Platform {
 			/** Cloudflare bindings + vars — Env comes from `wrangler types` (worker-configuration.d.ts) */
 			env: Env;

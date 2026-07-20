@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, pushState } from '$app/navigation';
+	import { page } from '$app/state';
 
 	import FeedGrid from '$lib/components/feed-grid.svelte';
+	import TitleModal from '$lib/components/title-modal.svelte';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Select from '$lib/components/ui/select';
 	import { MAX_FEED_PAGES } from '$lib/feed.constants';
@@ -24,7 +26,7 @@
 	// svelte-ignore state_referenced_locally
 	let items = $state(data.feed.items);
 	// svelte-ignore state_referenced_locally
-	let page = $state(data.feed.page);
+	let batch = $state(data.feed.page);
 	// svelte-ignore state_referenced_locally
 	let hasMore = $state(data.feed.hasMore);
 	let loading = $state(false);
@@ -33,7 +35,7 @@
 
 	$effect(() => {
 		items = data.feed.items;
-		page = data.feed.page;
+		batch = data.feed.page;
 		hasMore = data.feed.hasMore;
 		seen = new Set(data.feed.items.map((i) => i.tmdbId));
 	});
@@ -42,7 +44,7 @@
 		if (loading || !hasMore) return;
 		loading = true;
 		try {
-			const next = page + 1;
+			const next = batch + 1;
 			const params = new URLSearchParams({
 				type: data.query.type,
 				sort: data.query.sort,
@@ -50,14 +52,14 @@
 			});
 			const res = await fetch(`/api/feed?${params}`);
 			if (!res.ok) throw new Error(`feed fetch failed: ${res.status}`);
-			const batch = (await res.json()) as FeedPage;
+			const pageData = (await res.json()) as FeedPage;
 
-			const fresh = batch.items.filter((i) => !seen.has(i.tmdbId));
+			const fresh = pageData.items.filter((i) => !seen.has(i.tmdbId));
 			for (const i of fresh) seen.add(i.tmdbId);
 
 			items = [...items, ...fresh];
-			page = next;
-			hasMore = batch.hasMore && next < MAX_FEED_PAGES;
+			batch = next;
+			hasMore = pageData.hasMore && next < MAX_FEED_PAGES;
 		} catch {
 			// Network hiccup: stop paginating rather than retry-looping the sentinel.
 			hasMore = false;
@@ -78,9 +80,35 @@
 		goto(qs ? `/?${qs}` : '/', { keepFocus: true });
 	}
 
+	// Modal via SHALLOW routing: opening pushes ?title=…&mt=… plus page.state
+	// (no load re-run; back button closes). Direct loads/shared links open via
+	// the initial URL params, tracked separately so closing works there too.
+	type ModalTarget = { tmdbId: number; mediaType: 'movie' | 'tv' };
+
+	// svelte-ignore state_referenced_locally
+	let urlModal = $state<ModalTarget | null>(parseModalParams(page.url));
+
+	function parseModalParams(url: URL): ModalTarget | null {
+		const id = Number.parseInt(url.searchParams.get('title') ?? '', 10);
+		if (Number.isNaN(id)) return null;
+		return { tmdbId: id, mediaType: url.searchParams.get('mt') === 'tv' ? 'tv' : 'movie' };
+	}
+
+	const modal = $derived(page.state.showTitle ?? urlModal);
+
 	function openTitle(item: FeedItem) {
-		// Wired to the title modal via shallow routing in the next phase.
-		void item;
+		const url = new URL(location.href);
+		url.searchParams.set('title', String(item.tmdbId));
+		url.searchParams.set('mt', item.mediaType);
+		pushState(url, { showTitle: { tmdbId: item.tmdbId, mediaType: item.mediaType } });
+	}
+
+	function closeTitle() {
+		urlModal = null;
+		const url = new URL(location.href);
+		url.searchParams.delete('title');
+		url.searchParams.delete('mt');
+		pushState(url, {});
 	}
 </script>
 
@@ -116,4 +144,10 @@
 	</div>
 
 	<FeedGrid {items} {hasMore} {loading} onloadmore={loadMore} onselect={openTitle} />
+
+	{#if modal}
+		{#key `${modal.tmdbId}-${modal.mediaType}`}
+			<TitleModal tmdbId={modal.tmdbId} mediaType={modal.mediaType} onclose={closeTitle} />
+		{/key}
+	{/if}
 </main>
