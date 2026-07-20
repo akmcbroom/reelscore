@@ -35,18 +35,36 @@ MVP line is the end of Phase 6. **Do not deploy before parity** (live site!).
 
 ## Phase 3 — Title modal
 
-- [ ] 3.1 Hono GET /api/title/:id — JSON aggregate (details, credits, scores,
+- [x] 3.1 Hono GET /api/title/:id — JSON aggregate (details, credits, scores,
       rating, trailer, logo, providers)
-- [ ] 3.2 TitleModal (shadcn Dialog): backdrop hero, logo, score lip, meta,
+- [x] 3.2 TitleModal (shadcn Dialog): backdrop hero, logo, score lip, meta,
       trailer, overview; URL-param driven, scroll preserved
-- [ ] 3.3 Cast strip, providers, dev-gated score-breakdown popover
-- [ ] 3.4 TV seasons: GET /api/season/:id + episode UI
+- [x] 3.3 Cast strip, providers, dev-mode score-breakdown tooltip
+- [x] 3.4 TV seasons: GET /api/season/:id + episode UI
+      (final React state at `3d55b25`)
 
-## Phase 4 — Auth
+## Phase 3.5 — SvelteKit migration (owner decision 2026-07-19)
 
-- [ ] 4.1 Better Auth email/password: auth.server.ts, schema via
-      @better-auth/cli generate, additive migration, mounted at /api/auth/*
-- [ ] 4.2 /login + /signup routes, session in root loader, account menu, sign-out
+- [x] S0 Scaffold SvelteKit 2 + adapter-cloudflare; repo swap keeping
+      docs/drizzle/tests/bindings; exact pins
+- [x] S1 Domain code → src/lib + src/lib/server; 74 tests green — HARD GATE
+- [x] S2 Hono mounted at /api/[...paths] catch-all; /api/feed verified w/ live bindings
+- [x] S3 shadcn-svelte (same nova preset), Geist, cookie theme via handle
+      hook + no-flash script, Header/ThemeToggle
+- [x] S4 Feed: +page.server.ts load, tabs/sort via goto, runes infinite
+      scroll (79/79 unique), SSR HTML contains scored cards
+- [x] S5 Title modal via shallow routing (pushState + page.state; back
+      button closes; shareable ?title URLs)
+- [x] S6 Docs rewrite (ARCHITECTURE, DECISIONS, CLAUDE.md, README, ROADMAP),
+      session note, build + read-only wiring check
+
+## Phase 4 — Auth (SvelteKit-native)
+
+- [ ] 4.1 Better Auth email/password: src/lib/server/auth.ts, schema via
+      @better-auth/cli generate, additive migration, mounted at /api/auth/*;
+      session read in hooks.server.ts handle → locals.user → layout load
+- [ ] 4.2 /login + /signup as SvelteKit form actions with use:enhance
+      (progressive enhancement), account menu in header, sign-out
 
 ## Phase 5 — Search
 

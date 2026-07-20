@@ -22,13 +22,14 @@ and (post-MVP) per-user personalization. Live at getreelscore.com.
 
 ## Hard rules
 
-- **Score math in `app/lib/scoring.ts` is LOCKED** — never modify without an
+- **Score math in `src/lib/scoring.ts` is LOCKED** — never modify without an
   explicit owner request. Vitest coverage mandatory; `npm test` +
   `npm run typecheck` must pass before any commit.
-- All API endpoints are Hono routes in `workers/app.ts` under `/api/*`,
-  Zod-validated. Server-only code uses the `.server.ts` suffix.
+- All API endpoints are Hono routes in `src/lib/server/api.ts` under `/api/*`,
+  Zod-validated. Server-only code lives in `src/lib/server/` (build-enforced).
 - MDbList is the ONLY score source; TMDB is metadata-only.
-- Native shadcn/ui components first; the SVG score lip is the one custom visual.
+- Native shadcn-svelte components first; the SVG score lip is the one custom
+  visual. Svelte 5 runes; URL params are the state model (no store library).
 - Dependencies exact-pinned (no `^`); each new dependency gets a one-line
   justification in `docs/DECISIONS.md`.
 - D1 migrations only via `npm run db:generate` → `npm run db:migrate` (never

@@ -10,10 +10,11 @@ Live at [getreelscore.com](https://getreelscore.com).
 
 ## Stack
 
-- **React Router v8** (framework mode, SSR) on **Cloudflare Workers**
+- **SvelteKit 2** (Svelte 5 runes, SSR) on **Cloudflare Workers**
+  via `@sveltejs/adapter-cloudflare`
 - **Hono** JSON API at `/api/*` (same Worker), validated with **Zod**
 - **Cloudflare D1** (SQLite) via **Drizzle ORM**; **KV** for TMDB response caching
-- **shadcn/ui** + **Tailwind v4**, dark-first with light/dark/system toggle
+- **shadcn-svelte** (nova) + **Tailwind v4**, dark-first with light/dark/system toggle
 - **Better Auth** (email/password)
 - Scores from the **MDbList API**; metadata/images from **TMDB**
 

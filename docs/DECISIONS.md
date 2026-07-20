@@ -37,3 +37,27 @@
   drizzle-kit (typed D1 + migrations), lucide-react (icons), vitest (tests);
   shadcn stack (radix-ui, cva, clsx, tailwind-merge, tw-animate-css, geist)
   via shadcn CLI.
+- **2026-07-19** SECOND migration same day (owner decision): React Router v8 →
+  **SvelteKit 2 + adapter-cloudflare**, reversing the "match tidbits" stack
+  choice — tidbits will move to SvelteKit later too, so cross-project parity
+  is preserved on the new stack. Rationale: minimal boilerplate, form actions
+  + use:enhance for the auth/watchlist roadmap, no hook-rules bug class.
+  Domain code (scoring/tmdb/mdblist/D1 cache/Hono handlers/74 tests) ported
+  intact; only the ~10-file UI layer was rewritten. React app preserved at
+  `3d55b25`.
+- **2026-07-19** `src/lib/server/` replaces the `.server.ts` suffix convention
+  — SvelteKit build-enforces the server-only boundary (stronger guarantee).
+- **2026-07-19** Hono kept as the API layer, mounted at a
+  `src/routes/api/[...paths]/+server.ts` catch-all delegating to
+  `api.fetch(request, platform.env)`; loads call lib functions directly.
+- **2026-07-19** Title modal uses SvelteKit **shallow routing** (pushState +
+  page.state; URL params kept for shareable links) — no feed-load re-run on
+  open/close, back button closes the modal. Replaces the RR shouldRevalidate
+  workaround.
+- **2026-07-19** shadcn-svelte initialized with the same **nova** design
+  system (preset code `b0`); Geist swapped in for the preset's Inter to keep
+  visual parity. Dep swaps: svelte/kit/adapter-cloudflare/shadcn-svelte/
+  bits-ui/@lucide/svelte/tailwind-variants/mode-watcher/svelte-sonner IN;
+  react/react-dom/react-router/radix-ui/lucide-react/next-themes/isbot OUT.
+- **2026-07-19** `wrangler types` output moved to `src/worker-configuration.d.ts`
+  so svelte-check sees the Env/binding globals.
